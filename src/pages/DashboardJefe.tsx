@@ -146,6 +146,15 @@ const DashboardJefe = () => {
         <div className="p-6 md:p-8">
           {activeSection === "revision" && <SeccionRevision />}
           {activeSection === "asignacion" && <SeccionAsignacion />}
+          {activeSection === "documentos" && (
+            <>
+              <SectionHeader
+                title="Gestión Documental"
+                description="Envía documentos a los abogados y administra los archivos del bufete"
+              />
+              <GestionDocumentos mode="jefe" />
+            </>
+          )}
           {activeSection === "terminos" && <SeccionTerminosJefe />}
           {activeSection === "vencimientos" && <SeccionVencimientos />}
           {activeSection === "abogados" && <SeccionAbogados />}
