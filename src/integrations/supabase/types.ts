@@ -14,16 +14,220 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      case_comments: {
+        Row: {
+          abogado_id: string | null
+          author_id: string
+          case_id: string | null
+          created_at: string
+          id: string
+          texto: string
+        }
+        Insert: {
+          abogado_id?: string | null
+          author_id: string
+          case_id?: string | null
+          created_at?: string
+          id?: string
+          texto: string
+        }
+        Update: {
+          abogado_id?: string | null
+          author_id?: string
+          case_id?: string | null
+          created_at?: string
+          id?: string
+          texto?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "case_comments_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cases: {
+        Row: {
+          abogado_id: string | null
+          cliente_id: string | null
+          cliente_nombre: string
+          created_at: string
+          created_by: string | null
+          etapa: Database["public"]["Enums"]["case_status"]
+          fecha_vencimiento: string | null
+          id: string
+          juzgado: string | null
+          observaciones: string | null
+          radicado: string
+          tipo: string
+          updated_at: string
+          urgente: boolean
+        }
+        Insert: {
+          abogado_id?: string | null
+          cliente_id?: string | null
+          cliente_nombre: string
+          created_at?: string
+          created_by?: string | null
+          etapa?: Database["public"]["Enums"]["case_status"]
+          fecha_vencimiento?: string | null
+          id?: string
+          juzgado?: string | null
+          observaciones?: string | null
+          radicado: string
+          tipo: string
+          updated_at?: string
+          urgente?: boolean
+        }
+        Update: {
+          abogado_id?: string | null
+          cliente_id?: string | null
+          cliente_nombre?: string
+          created_at?: string
+          created_by?: string | null
+          etapa?: Database["public"]["Enums"]["case_status"]
+          fecha_vencimiento?: string | null
+          id?: string
+          juzgado?: string | null
+          observaciones?: string | null
+          radicado?: string
+          tipo?: string
+          updated_at?: string
+          urgente?: boolean
+        }
+        Relationships: []
+      }
+      documents: {
+        Row: {
+          case_id: string | null
+          created_at: string
+          description: string | null
+          file_name: string
+          file_path: string
+          file_size: number | null
+          id: string
+          mime_type: string | null
+          recipient_id: string | null
+          shared_with_client: boolean
+          uploaded_by: string
+        }
+        Insert: {
+          case_id?: string | null
+          created_at?: string
+          description?: string | null
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          id?: string
+          mime_type?: string | null
+          recipient_id?: string | null
+          shared_with_client?: boolean
+          uploaded_by: string
+        }
+        Update: {
+          case_id?: string | null
+          created_at?: string
+          description?: string | null
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          id?: string
+          mime_type?: string | null
+          recipient_id?: string | null
+          shared_with_client?: boolean
+          uploaded_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "documents_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          cedula: string | null
+          created_at: string
+          email: string
+          especialidad: string | null
+          full_name: string
+          id: string
+          phone: string | null
+          updated_at: string
+        }
+        Insert: {
+          cedula?: string | null
+          created_at?: string
+          email: string
+          especialidad?: string | null
+          full_name?: string
+          id: string
+          phone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          cedula?: string | null
+          created_at?: string
+          email?: string
+          especialidad?: string | null
+          full_name?: string
+          id?: string
+          phone?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "jefe" | "abogado" | "cliente"
+      case_status:
+        | "Creación"
+        | "Recaudo Probatorio"
+        | "Proyección"
+        | "Revisión"
+        | "Proyección de Recursos"
+        | "Recabar Pruebas"
+        | "Audiencia"
+        | "Cerrado"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +354,18 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["jefe", "abogado", "cliente"],
+      case_status: [
+        "Creación",
+        "Recaudo Probatorio",
+        "Proyección",
+        "Revisión",
+        "Proyección de Recursos",
+        "Recabar Pruebas",
+        "Audiencia",
+        "Cerrado",
+      ],
+    },
   },
 } as const
