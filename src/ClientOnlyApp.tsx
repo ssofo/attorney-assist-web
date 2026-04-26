@@ -26,8 +26,17 @@ export function ClientOnlyApp() {
         style={{
           minHeight: "100vh",
           background: "linear-gradient(135deg,#0e1730,#1E2E4F,#3a4974)",
+          display: "grid",
+          placeItems: "center",
+          color: "#DED3BC",
+          fontFamily: "Lato, sans-serif",
         }}
-      />
+      >
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontSize: 18, fontWeight: 700 }}>Jurova Legal Group</div>
+          <div style={{ marginTop: 8, fontSize: 14, opacity: 0.8 }}>Cargando plataforma…</div>
+        </div>
+      </div>
     );
   }
 
