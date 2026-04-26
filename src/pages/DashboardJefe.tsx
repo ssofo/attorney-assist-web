@@ -270,7 +270,31 @@ const SeccionRevision = () => {
 
 /* ── Asignación de Casos ── */
 const SeccionAsignacion = () => {
+  const { toast } = useToast();
+  const { user } = useAuth();
   const [paso, setPaso] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
+  const [abogados, setAbogados] = useState<{ id: string; full_name: string; especialidad: string | null }[]>([]);
+  const [form, setForm] = useState({
+    radicado: "",
+    tipo: "",
+    cliente_nombre: "",
+    juzgado: "",
+    abogado_id: "",
+    observaciones: "",
+    fecha_vencimiento: "",
+    urgente: false,
+  });
+
+  useEffect(() => {
+    (async () => {
+      const { data: roleRows } = await supabase.from("user_roles").select("user_id").eq("role", "abogado");
+      const ids = (roleRows ?? []).map((r) => r.user_id);
+      if (ids.length === 0) { setAbogados([]); return; }
+      const { data } = await supabase.from("profiles").select("id, full_name, especialidad").in("id", ids);
+      setAbogados((data ?? []) as any);
+    })();
+  }, []);
 
   const pasos = [
     { label: "Datos del caso", desc: "Información básica del caso" },
@@ -280,11 +304,39 @@ const SeccionAsignacion = () => {
     { label: "Confirmar", desc: "Revisar y enviar asignación" },
   ];
 
+  const handleSubmit = async () => {
+    if (!user) return;
+    if (!form.radicado || !form.tipo || !form.cliente_nombre) {
+      toast({ title: "Faltan datos", description: "Radicado, tipo y cliente son obligatorios", variant: "destructive" });
+      setPaso(0);
+      return;
+    }
+    setSubmitting(true);
+    const { error } = await supabase.from("cases").insert({
+      radicado: form.radicado,
+      tipo: form.tipo,
+      cliente_nombre: form.cliente_nombre,
+      juzgado: form.juzgado || null,
+      abogado_id: form.abogado_id || null,
+      observaciones: form.observaciones || null,
+      fecha_vencimiento: form.fecha_vencimiento || null,
+      urgente: form.urgente,
+      created_by: user.id,
+    });
+    setSubmitting(false);
+    if (error) {
+      toast({ title: "No se pudo crear el caso", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Caso asignado", description: `Radicado ${form.radicado} creado correctamente.` });
+    setForm({ radicado: "", tipo: "", cliente_nombre: "", juzgado: "", abogado_id: "", observaciones: "", fecha_vencimiento: "", urgente: false });
+    setPaso(0);
+  };
+
   return (
     <>
       <SectionHeader title="Asignación de Casos" description="Crea y asigna nuevos casos a los abogados paso a paso" />
 
-      {/* Step indicator */}
       <div className="flex items-center gap-2 mb-8 flex-wrap">
         {pasos.map((p, i) => (
           <div key={i} className="flex items-center gap-2">
@@ -310,27 +362,36 @@ const SeccionAsignacion = () => {
         ))}
       </div>
 
-      {/* Step content */}
       <div className="bg-card rounded-xl border border-border p-6">
         {paso === 0 && (
           <div className="space-y-4">
             <h3 className="font-display text-lg font-semibold text-foreground">Datos del Caso</h3>
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label className="font-body text-sm">Número de radicado</Label>
-                <Input placeholder="Ej: 2024-0960" />
+                <Label className="font-body text-sm">Número de radicado *</Label>
+                <Input value={form.radicado} onChange={(e) => setForm({ ...form, radicado: e.target.value })} placeholder="Ej: 2024-0960" />
               </div>
               <div className="space-y-2">
-                <Label className="font-body text-sm">Tipo de proceso</Label>
-                <Input placeholder="Civil, Laboral, Penal..." />
+                <Label className="font-body text-sm">Tipo de proceso *</Label>
+                <Input value={form.tipo} onChange={(e) => setForm({ ...form, tipo: e.target.value })} placeholder="Civil, Laboral, Penal..." />
               </div>
               <div className="space-y-2">
-                <Label className="font-body text-sm">Cliente</Label>
-                <Input placeholder="Nombre del cliente" />
+                <Label className="font-body text-sm">Cliente *</Label>
+                <Input value={form.cliente_nombre} onChange={(e) => setForm({ ...form, cliente_nombre: e.target.value })} placeholder="Nombre del cliente" />
               </div>
               <div className="space-y-2">
                 <Label className="font-body text-sm">Juzgado</Label>
-                <Input placeholder="Juzgado asignado" />
+                <Input value={form.juzgado} onChange={(e) => setForm({ ...form, juzgado: e.target.value })} placeholder="Juzgado asignado" />
+              </div>
+              <div className="space-y-2">
+                <Label className="font-body text-sm">Fecha de vencimiento</Label>
+                <Input type="date" value={form.fecha_vencimiento} onChange={(e) => setForm({ ...form, fecha_vencimiento: e.target.value })} />
+              </div>
+              <div className="space-y-2 flex items-end">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={form.urgente} onChange={(e) => setForm({ ...form, urgente: e.target.checked })} />
+                  <span className="font-body text-sm">Marcar como urgente</span>
+                </label>
               </div>
             </div>
           </div>
@@ -338,23 +399,35 @@ const SeccionAsignacion = () => {
         {paso === 1 && (
           <div className="space-y-4">
             <h3 className="font-display text-lg font-semibold text-foreground">Asignar Abogado</h3>
-            {["Dr. López - Civil, Laboral", "Dra. Torres - Penal, Familiar", "Dr. Ramírez - Comercial"].map((ab) => (
-              <div key={ab} className="p-4 rounded-xl border border-border hover:border-accent/30 cursor-pointer transition-colors flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center">
-                  <Users className="w-4 h-4 text-accent" />
-                </div>
-                <div>
-                  <p className="font-display text-sm font-semibold text-foreground">{ab.split(" - ")[0]}</p>
-                  <p className="font-body text-xs text-muted-foreground">Especialidad: {ab.split(" - ")[1]}</p>
-                </div>
-              </div>
-            ))}
+            {abogados.length === 0 ? (
+              <p className="font-body text-sm text-muted-foreground">No hay abogados registrados aún. Crea uno desde "Gestión de Abogados".</p>
+            ) : (
+              abogados.map((ab) => (
+                <button
+                  key={ab.id}
+                  type="button"
+                  onClick={() => setForm({ ...form, abogado_id: ab.id })}
+                  className={`w-full text-left p-4 rounded-xl border transition-colors flex items-center gap-3 ${
+                    form.abogado_id === ab.id ? "border-accent bg-accent/5" : "border-border hover:border-accent/30"
+                  }`}
+                >
+                  <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center">
+                    <Users className="w-4 h-4 text-accent" />
+                  </div>
+                  <div>
+                    <p className="font-display text-sm font-semibold text-foreground">{ab.full_name}</p>
+                    <p className="font-body text-xs text-muted-foreground">Especialidad: {ab.especialidad ?? "—"}</p>
+                  </div>
+                  {form.abogado_id === ab.id && <Check className="w-4 h-4 text-accent ml-auto" />}
+                </button>
+              ))
+            )}
           </div>
         )}
         {paso === 2 && (
           <div className="space-y-4">
             <h3 className="font-display text-lg font-semibold text-foreground">Definir Términos Procesales</h3>
-            <p className="font-body text-xs text-muted-foreground">Establece el tiempo límite (en días) para cada etapa del caso</p>
+            <p className="font-body text-xs text-muted-foreground">Plazos sugeridos por etapa (referenciales para este caso)</p>
             {etapas.map((et) => (
               <div key={et} className="flex items-center justify-between p-3 rounded-lg border border-border">
                 <span className="font-body text-sm text-foreground">{et}</span>
@@ -369,7 +442,7 @@ const SeccionAsignacion = () => {
         {paso === 3 && (
           <div className="space-y-4">
             <h3 className="font-display text-lg font-semibold text-foreground">Observaciones Iniciales</h3>
-            <Textarea placeholder="Instrucciones, notas importantes, documentos requeridos..." rows={6} />
+            <Textarea value={form.observaciones} onChange={(e) => setForm({ ...form, observaciones: e.target.value })} placeholder="Instrucciones, notas importantes, documentos requeridos..." rows={6} />
           </div>
         )}
         {paso === 4 && (
@@ -378,14 +451,21 @@ const SeccionAsignacion = () => {
               <Check className="w-8 h-8 text-accent" />
             </div>
             <h3 className="font-display text-lg font-semibold text-foreground">Confirmar Asignación</h3>
-            <p className="font-body text-sm text-muted-foreground">Revisa los datos y confirma para enviar el caso al abogado asignado</p>
-            <Button className="gradient-gold text-primary font-body font-semibold shadow-gold hover:opacity-90 border-0 mt-4">
-              Enviar Asignación
+            <div className="text-left max-w-md mx-auto bg-muted/30 p-4 rounded-lg space-y-1">
+              <p className="font-body text-xs"><b>Radicado:</b> {form.radicado || "—"}</p>
+              <p className="font-body text-xs"><b>Tipo:</b> {form.tipo || "—"}</p>
+              <p className="font-body text-xs"><b>Cliente:</b> {form.cliente_nombre || "—"}</p>
+              <p className="font-body text-xs"><b>Juzgado:</b> {form.juzgado || "—"}</p>
+              <p className="font-body text-xs"><b>Abogado:</b> {abogados.find(a => a.id === form.abogado_id)?.full_name || "Sin asignar"}</p>
+              <p className="font-body text-xs"><b>Vencimiento:</b> {form.fecha_vencimiento || "—"}</p>
+              <p className="font-body text-xs"><b>Urgente:</b> {form.urgente ? "Sí" : "No"}</p>
+            </div>
+            <Button onClick={handleSubmit} disabled={submitting} className="gradient-gold text-primary font-body font-semibold shadow-gold hover:opacity-90 border-0 mt-4">
+              {submitting ? "Enviando…" : "Enviar Asignación"}
             </Button>
           </div>
         )}
 
-        {/* Navigation */}
         {paso < 4 && (
           <div className="flex justify-between mt-6 pt-4 border-t border-border">
             <Button variant="outline" onClick={() => setPaso(Math.max(0, paso - 1))} disabled={paso === 0} className="font-body">
