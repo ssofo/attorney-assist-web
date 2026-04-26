@@ -1,5 +1,5 @@
-// Edge function: create-abogado
-// Lets a "jefe" create a new "abogado" account using the service role key.
+// Edge function: create-abogado (also handles cliente creation)
+// Lets a "jefe" create a new "abogado" or "cliente" account using the service role key.
 // The caller must be authenticated and have role = 'jefe'.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
@@ -18,6 +18,7 @@ interface Payload {
   phone?: string;
   cedula?: string;
   especialidad?: string;
+  role?: "abogado" | "cliente";
 }
 
 Deno.serve(async (req) => {
@@ -39,7 +40,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Verify caller and role
     const userClient = createClient(SUPABASE_URL, ANON, {
       global: { headers: { Authorization: authHeader } },
     });
@@ -53,7 +53,6 @@ Deno.serve(async (req) => {
 
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE);
 
-    // Check role 'jefe'
     const { data: roleRow } = await admin
       .from("user_roles")
       .select("role")
@@ -63,7 +62,7 @@ Deno.serve(async (req) => {
 
     if (!roleRow) {
       return new Response(
-        JSON.stringify({ error: "Solo el director puede crear abogados" }),
+        JSON.stringify({ error: "Solo el director puede crear cuentas" }),
         {
           status: 403,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -72,6 +71,8 @@ Deno.serve(async (req) => {
     }
 
     const body = (await req.json()) as Payload;
+    const targetRole = body.role === "cliente" ? "cliente" : "abogado";
+
     if (!body.email || !body.password || !body.full_name) {
       return new Response(JSON.stringify({ error: "Faltan campos obligatorios" }), {
         status: 400,
@@ -88,7 +89,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Create auth user (auto-confirm so the abogado can log in immediately)
     const { data: created, error: createErr } = await admin.auth.admin.createUser({
       email: body.email,
       password: body.password,
@@ -98,7 +98,7 @@ Deno.serve(async (req) => {
         phone: body.phone ?? null,
         cedula: body.cedula ?? null,
         especialidad: body.especialidad ?? null,
-        role: "abogado",
+        role: targetRole,
       },
     });
 
@@ -114,7 +114,6 @@ Deno.serve(async (req) => {
 
     const newUserId = created.user.id;
 
-    // Ensure profile/role rows exist (handle_new_user trigger should also do this)
     await admin.from("profiles").upsert(
       {
         id: newUserId,
@@ -130,12 +129,12 @@ Deno.serve(async (req) => {
     await admin
       .from("user_roles")
       .upsert(
-        { user_id: newUserId, role: "abogado" },
+        { user_id: newUserId, role: targetRole },
         { onConflict: "user_id,role" },
       );
 
     return new Response(
-      JSON.stringify({ success: true, user_id: newUserId }),
+      JSON.stringify({ success: true, user_id: newUserId, role: targetRole }),
       {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
