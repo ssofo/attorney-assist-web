@@ -2,3 +2,6 @@ project_id = "znvabwnbnfaotclkzael"
 
 [functions.create-abogado]
 verify_jwt = true
+
+[functions.bootstrap-jefe]
+verify_jwt = false
