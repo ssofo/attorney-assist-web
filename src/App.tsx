@@ -12,6 +12,7 @@ import ConsultarCaso from "./pages/ConsultarCaso";
 import DashboardAbogado from "./pages/DashboardAbogado";
 import DashboardJefe from "./pages/DashboardJefe";
 import DashboardCliente from "./pages/DashboardCliente";
+import CambiarPassword from "./pages/CambiarPassword";
 import NotFound from "./pages/NotFound";
 
 const App = () => (
@@ -48,6 +49,14 @@ const App = () => (
             element={
               <ProtectedRoute allowedRoles={["cliente", "jefe"]}>
                 <DashboardCliente />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/cambiar-password"
+            element={
+              <ProtectedRoute allowedRoles={["abogado", "cliente", "jefe"]}>
+                <CambiarPassword />
               </ProtectedRoute>
             }
           />

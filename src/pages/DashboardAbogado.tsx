@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
+import { KeyRound } from "lucide-react";
 import {
   Scale,
   Briefcase,
@@ -33,7 +35,9 @@ const DashboardAbogado = () => {
   const [activeSection, setActiveSection] = useState("casos");
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const handleLogout = () => {
+  const { signOut } = useAuth();
+  const handleLogout = async () => {
+    await signOut();
     navigate("/");
   };
 
@@ -64,7 +68,14 @@ const DashboardAbogado = () => {
             </button>
           ))}
         </nav>
-        <div className="p-3 border-t border-accent/10">
+        <div className="p-3 border-t border-accent/10 space-y-1">
+          <button
+            onClick={() => navigate("/cambiar-password")}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-body text-sm text-primary-foreground/60 hover:text-primary-foreground hover:bg-accent/5 transition-colors"
+          >
+            <KeyRound className="w-4 h-4" />
+            Cambiar contraseña
+          </button>
           <button
             onClick={handleLogout}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-body text-sm text-primary-foreground/40 hover:text-primary-foreground hover:bg-accent/5 transition-colors"
@@ -110,7 +121,14 @@ const DashboardAbogado = () => {
                 </button>
               ))}
             </nav>
-            <div className="p-3 border-t border-accent/10">
+            <div className="p-3 border-t border-accent/10 space-y-1">
+              <button
+                onClick={() => { navigate("/cambiar-password"); setSidebarOpen(false); }}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-body text-sm text-primary-foreground/60 hover:text-primary-foreground hover:bg-accent/5 transition-colors"
+              >
+                <KeyRound className="w-4 h-4" />
+                Cambiar contraseña
+              </button>
               <button
                 onClick={handleLogout}
                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-body text-sm text-primary-foreground/40 hover:text-primary-foreground hover:bg-accent/5 transition-colors"

@@ -44,7 +44,7 @@ const menuItems = [
   { id: "documentos", icon: Upload, label: "Gestión Documental" },
   { id: "terminos", icon: Clock, label: "Control de Términos" },
   { id: "vencimientos", icon: AlertTriangle, label: "Próximos Vencimientos" },
-  { id: "abogados", icon: Users, label: "Gestión de Abogados" },
+  { id: "abogados", icon: Users, label: "Gestión de Usuarios" },
   { id: "comentarios", icon: MessageSquare, label: "Comentarios Internos" },
   { id: "calendario", icon: CalendarDays, label: "Calendario General" },
   { id: "analitica", icon: BarChart3, label: "Analítica y KPIs" },
@@ -532,9 +532,11 @@ interface AbogadoRow {
 const SeccionAbogados = () => {
   const { toast } = useToast();
   const [abogados, setAbogados] = useState<AbogadoRow[]>([]);
+  const [clientes, setClientes] = useState<AbogadoRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [createRole, setCreateRole] = useState<"abogado" | "cliente">("abogado");
   const [form, setForm] = useState({
     full_name: "", email: "", password: "", phone: "", cedula: "", especialidad: "",
   });
@@ -542,14 +544,24 @@ const SeccionAbogados = () => {
   const load = async () => {
     setLoading(true);
     const { data: roleRows } = await supabase
-      .from("user_roles").select("user_id").eq("role", "abogado");
+      .from("user_roles").select("user_id, role").in("role", ["abogado", "cliente"]);
     const ids = (roleRows ?? []).map((r) => r.user_id);
-    if (ids.length === 0) { setAbogados([]); setLoading(false); return; }
+    if (ids.length === 0) { setAbogados([]); setClientes([]); setLoading(false); return; }
     const { data } = await supabase
       .from("profiles")
       .select("id, full_name, email, especialidad, phone")
       .in("id", ids);
-    setAbogados((data ?? []) as AbogadoRow[]);
+    const profMap = new Map((data ?? []).map((p) => [p.id, p]));
+    const abos: AbogadoRow[] = [];
+    const clis: AbogadoRow[] = [];
+    for (const r of roleRows ?? []) {
+      const p = profMap.get(r.user_id);
+      if (!p) continue;
+      if (r.role === "abogado") abos.push(p as AbogadoRow);
+      else if (r.role === "cliente") clis.push(p as AbogadoRow);
+    }
+    setAbogados(abos);
+    setClientes(clis);
     setLoading(false);
   };
 
@@ -562,7 +574,9 @@ const SeccionAbogados = () => {
       return;
     }
     setSubmitting(true);
-    const { data, error } = await supabase.functions.invoke("create-abogado", { body: form });
+    const { data, error } = await supabase.functions.invoke("create-abogado", {
+      body: { ...form, role: createRole },
+    });
     setSubmitting(false);
     if (error || (data as any)?.error) {
       toast({
@@ -572,7 +586,8 @@ const SeccionAbogados = () => {
       });
       return;
     }
-    toast({ title: "Abogado creado", description: `${form.full_name} ya puede iniciar sesión.` });
+    const label = createRole === "cliente" ? "Cliente" : "Abogado";
+    toast({ title: `${label} creado`, description: `${form.full_name} ya puede iniciar sesión.` });
     setForm({ full_name: "", email: "", password: "", phone: "", cedula: "", especialidad: "" });
     setShowForm(false);
     load();
@@ -580,17 +595,39 @@ const SeccionAbogados = () => {
 
   return (
     <>
-      <SectionHeader title="Gestión de Abogados" description="Crea cuentas de abogados y supervisa el equipo" />
+      <SectionHeader title="Gestión de Usuarios" description="Crea cuentas de abogados y clientes, y supervisa el equipo" />
 
       <div className="mb-5 flex justify-end">
         <Button onClick={() => setShowForm(!showForm)} className="gradient-gold text-primary border-0">
-          {showForm ? "Cancelar" : "+ Nuevo Abogado"}
+          {showForm ? "Cancelar" : "+ Nueva cuenta"}
         </Button>
       </div>
 
       {showForm && (
         <form onSubmit={handleCreate} className="bg-card rounded-xl border border-border p-6 mb-6 space-y-4">
-          <h3 className="font-display text-lg font-bold text-foreground">Crear cuenta de Abogado</h3>
+          <h3 className="font-display text-lg font-bold text-foreground">Crear nueva cuenta</h3>
+
+          <div className="flex gap-2 p-1 bg-muted rounded-lg w-fit">
+            <button
+              type="button"
+              onClick={() => setCreateRole("abogado")}
+              className={`px-4 py-1.5 rounded-md text-sm font-body transition-colors ${
+                createRole === "abogado" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
+              }`}
+            >
+              Abogado
+            </button>
+            <button
+              type="button"
+              onClick={() => setCreateRole("cliente")}
+              className={`px-4 py-1.5 rounded-md text-sm font-body transition-colors ${
+                createRole === "cliente" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
+              }`}
+            >
+              Cliente
+            </button>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label>Nombre completo *</Label>
@@ -604,10 +641,12 @@ const SeccionAbogados = () => {
               <Label>Contraseña inicial *</Label>
               <Input type="text" required minLength={8} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Mín. 8 caracteres" />
             </div>
-            <div className="space-y-1.5">
-              <Label>Especialidad</Label>
-              <Input value={form.especialidad} onChange={(e) => setForm({ ...form, especialidad: e.target.value })} placeholder="Ej. Penal, Administrativo" />
-            </div>
+            {createRole === "abogado" && (
+              <div className="space-y-1.5">
+                <Label>Especialidad</Label>
+                <Input value={form.especialidad} onChange={(e) => setForm({ ...form, especialidad: e.target.value })} placeholder="Ej. Penal, Administrativo" />
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label>Teléfono</Label>
               <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
@@ -617,33 +656,64 @@ const SeccionAbogados = () => {
               <Input value={form.cedula} onChange={(e) => setForm({ ...form, cedula: e.target.value })} />
             </div>
           </div>
+          <p className="text-[11px] text-muted-foreground">
+            La persona podrá cambiar esta contraseña desde su panel después de iniciar sesión.
+          </p>
           <Button type="submit" disabled={submitting} className="gradient-gold text-primary border-0">
-            {submitting ? "Creando…" : "Crear cuenta"}
+            {submitting ? "Creando…" : `Crear ${createRole === "cliente" ? "Cliente" : "Abogado"}`}
           </Button>
         </form>
       )}
 
       {loading ? (
         <p className="font-body text-sm text-muted-foreground">Cargando…</p>
-      ) : abogados.length === 0 ? (
-        <div className="bg-card rounded-xl border border-border p-8 text-center">
-          <p className="font-body text-sm text-muted-foreground">Aún no hay abogados registrados. Crea el primero con el botón superior.</p>
-        </div>
       ) : (
-        <div className="grid gap-4">
-          {abogados.map((ab) => (
-            <div key={ab.id} className="bg-card rounded-xl border border-border p-5 flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center">
-                  <Users className="w-5 h-5 text-accent" />
-                </div>
-                <div>
-                  <p className="font-display text-base font-semibold text-foreground">{ab.full_name}</p>
-                  <p className="font-body text-xs text-muted-foreground">{ab.especialidad ?? "Sin especialidad"} · {ab.email}</p>
-                </div>
+        <div className="space-y-8">
+          <div>
+            <h3 className="font-display text-base font-semibold text-foreground mb-3">Abogados ({abogados.length})</h3>
+            {abogados.length === 0 ? (
+              <div className="bg-card rounded-xl border border-border p-6 text-center">
+                <p className="font-body text-sm text-muted-foreground">Aún no hay abogados registrados.</p>
               </div>
-            </div>
-          ))}
+            ) : (
+              <div className="grid gap-3">
+                {abogados.map((ab) => (
+                  <div key={ab.id} className="bg-card rounded-xl border border-border p-4 flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center">
+                      <Users className="w-4 h-4 text-accent" />
+                    </div>
+                    <div>
+                      <p className="font-display text-sm font-semibold text-foreground">{ab.full_name}</p>
+                      <p className="font-body text-xs text-muted-foreground">{ab.especialidad ?? "Sin especialidad"} · {ab.email}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <h3 className="font-display text-base font-semibold text-foreground mb-3">Clientes ({clientes.length})</h3>
+            {clientes.length === 0 ? (
+              <div className="bg-card rounded-xl border border-border p-6 text-center">
+                <p className="font-body text-sm text-muted-foreground">Aún no hay clientes registrados.</p>
+              </div>
+            ) : (
+              <div className="grid gap-3">
+                {clientes.map((c) => (
+                  <div key={c.id} className="bg-card rounded-xl border border-border p-4 flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center">
+                      <Users className="w-4 h-4 text-accent" />
+                    </div>
+                    <div>
+                      <p className="font-display text-sm font-semibold text-foreground">{c.full_name}</p>
+                      <p className="font-body text-xs text-muted-foreground">{c.email}{c.phone ? ` · ${c.phone}` : ""}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </>
