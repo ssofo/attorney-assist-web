@@ -830,20 +830,69 @@ const SeccionVencimientos = () => {
 };
 
 /* ── Comentarios Internos ── */
-const SeccionComentarios = () => {
-  const [comentarios, setComentarios] = useState([
-    { id: 1, autor: "Director", caso: "#2024-0912", abogado: "Dr. López", texto: "Revisar nuevamente la estrategia de defensa antes de la audiencia.", fecha: "Hace 2 horas", privado: true },
-    { id: 2, autor: "Director", caso: "#2024-0950", abogado: "Dra. Torres", texto: "Excelente avance. Mantener el ritmo.", fecha: "Ayer", privado: true },
-    { id: 3, autor: "Director", caso: "#2024-0847", abogado: "Dr. López", texto: "Solicitar pruebas adicionales al cliente urgentemente.", fecha: "Hace 3 días", privado: true },
-  ]);
-  const [nuevo, setNuevo] = useState("");
-  const [casoSel, setCasoSel] = useState("");
+interface ComentarioRow {
+  id: string;
+  texto: string;
+  case_id: string | null;
+  abogado_id: string | null;
+  author_id: string;
+  created_at: string;
+}
 
-  const agregar = () => {
-    if (!nuevo.trim() || !casoSel.trim()) return;
-    setComentarios([{ id: Date.now(), autor: "Director", caso: casoSel, abogado: "—", texto: nuevo, fecha: "Ahora", privado: true }, ...comentarios]);
-    setNuevo("");
-    setCasoSel("");
+const SeccionComentarios = () => {
+  const { toast } = useToast();
+  const { user } = useAuth();
+  const [comentarios, setComentarios] = useState<ComentarioRow[]>([]);
+  const [casos, setCasos] = useState<{ id: string; radicado: string; cliente_nombre: string; abogado_id: string | null }[]>([]);
+  const [abogadosMap, setAbogadosMap] = useState<Record<string, string>>({});
+  const [casoSel, setCasoSel] = useState("");
+  const [nuevo, setNuevo] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    const { data: casosData } = await supabase
+      .from("cases").select("id, radicado, cliente_nombre, abogado_id").order("created_at", { ascending: false });
+    setCasos((casosData ?? []) as any);
+
+    const { data: profsData } = await supabase
+      .from("profiles").select("id, full_name");
+    const map: Record<string, string> = {};
+    (profsData ?? []).forEach((p: any) => { map[p.id] = p.full_name; });
+    setAbogadosMap(map);
+
+    const { data } = await supabase
+      .from("case_comments")
+      .select("id, texto, case_id, abogado_id, author_id, created_at")
+      .order("created_at", { ascending: false });
+    setComentarios((data ?? []) as ComentarioRow[]);
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const agregar = async () => {
+    if (!user) return;
+    if (!nuevo.trim() || !casoSel) {
+      toast({ title: "Datos incompletos", description: "Selecciona un caso y escribe el comentario", variant: "destructive" });
+      return;
+    }
+    const caso = casos.find((c) => c.id === casoSel);
+    setSaving(true);
+    const { error } = await supabase.from("case_comments").insert({
+      texto: nuevo.trim(),
+      author_id: user.id,
+      case_id: casoSel,
+      abogado_id: caso?.abogado_id ?? null,
+    });
+    setSaving(false);
+    if (error) {
+      toast({ title: "No se pudo guardar", description: error.message, variant: "destructive" });
+      return;
+    }
+    setNuevo(""); setCasoSel("");
+    load();
   };
 
   return (
@@ -855,31 +904,59 @@ const SeccionComentarios = () => {
           Nuevo comentario
         </h3>
         <div className="grid gap-3">
-          <Input placeholder="Número de caso (ej: #2024-0912)" value={casoSel} onChange={(e) => setCasoSel(e.target.value)} />
+          <Select value={casoSel} onValueChange={setCasoSel}>
+            <SelectTrigger><SelectValue placeholder="Seleccionar caso" /></SelectTrigger>
+            <SelectContent>
+              {casos.length === 0 ? (
+                <div className="px-3 py-2 text-xs text-muted-foreground">No hay casos creados aún</div>
+              ) : (
+                casos.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>#{c.radicado} — {c.cliente_nombre}</SelectItem>
+                ))
+              )}
+            </SelectContent>
+          </Select>
           <Textarea placeholder="Escribe tu nota privada..." value={nuevo} onChange={(e) => setNuevo(e.target.value)} rows={3} />
-          <Button onClick={agregar} className="gradient-gold text-primary-foreground font-body font-semibold shadow-gold hover:opacity-90 border-0 self-start">
-            Guardar comentario
+          <Button onClick={agregar} disabled={saving} className="gradient-gold text-primary-foreground font-body font-semibold shadow-gold hover:opacity-90 border-0 self-start">
+            {saving ? "Guardando…" : "Guardar comentario"}
           </Button>
         </div>
       </div>
       <div className="grid gap-3">
-        {comentarios.map((c) => (
-          <div key={c.id} className="bg-card rounded-xl border border-border p-5">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full gradient-navy flex items-center justify-center">
-                  <Shield className="w-4 h-4 text-accent" />
-                </div>
-                <div>
-                  <p className="font-display text-sm font-semibold text-foreground">{c.autor} · Caso {c.caso}</p>
-                  <p className="font-body text-[10px] text-muted-foreground">Sobre: {c.abogado} · {c.fecha}</p>
-                </div>
-              </div>
-              <span className="text-[10px] font-body px-2 py-0.5 rounded-full bg-accent/10 text-accent font-medium">Privado</span>
-            </div>
-            <p className="font-body text-sm text-foreground leading-relaxed">{c.texto}</p>
+        {loading ? (
+          <p className="font-body text-sm text-muted-foreground">Cargando…</p>
+        ) : comentarios.length === 0 ? (
+          <div className="bg-card rounded-xl border border-border p-8 text-center">
+            <p className="font-body text-sm text-muted-foreground">Aún no hay comentarios.</p>
           </div>
-        ))}
+        ) : (
+          comentarios.map((c) => {
+            const caso = casos.find((x) => x.id === c.case_id);
+            const abogado = c.abogado_id ? abogadosMap[c.abogado_id] : "—";
+            const autor = abogadosMap[c.author_id] ?? "Director";
+            return (
+              <div key={c.id} className="bg-card rounded-xl border border-border p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full gradient-navy flex items-center justify-center">
+                      <Shield className="w-4 h-4 text-accent" />
+                    </div>
+                    <div>
+                      <p className="font-display text-sm font-semibold text-foreground">
+                        {autor} · {caso ? `Caso #${caso.radicado}` : "Caso"}
+                      </p>
+                      <p className="font-body text-[10px] text-muted-foreground">
+                        Sobre: {abogado} · {new Date(c.created_at).toLocaleString("es-CO")}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-body px-2 py-0.5 rounded-full bg-accent/10 text-accent font-medium">Privado</span>
+                </div>
+                <p className="font-body text-sm text-foreground leading-relaxed">{c.texto}</p>
+              </div>
+            );
+          })
+        )}
       </div>
     </>
   );
