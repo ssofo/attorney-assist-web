@@ -28,10 +28,20 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { GestionDocumentos } from "@/components/GestionDocumentos";
+import { Upload } from "lucide-react";
 
 const menuItems = [
   { id: "revision", icon: FileText, label: "Revisión de Casos" },
   { id: "asignacion", icon: Briefcase, label: "Asignación de Casos" },
+  { id: "documentos", icon: Upload, label: "Gestión Documental" },
   { id: "terminos", icon: Clock, label: "Control de Términos" },
   { id: "vencimientos", icon: AlertTriangle, label: "Próximos Vencimientos" },
   { id: "abogados", icon: Users, label: "Gestión de Abogados" },
