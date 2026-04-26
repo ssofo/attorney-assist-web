@@ -1,9 +1,12 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Scale, ArrowLeft, CalendarDays, CheckCircle, Clock, LogOut } from "lucide-react";
+import { Scale, ArrowLeft, CalendarDays, CheckCircle, Clock, LogOut, KeyRound } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 
 const DashboardCliente = () => {
   const navigate = useNavigate();
+  const { signOut } = useAuth();
+  const handleLogout = async () => { await signOut(); navigate("/"); };
 
   const caso = {
     id: "2024-0847",
@@ -34,13 +37,22 @@ const DashboardCliente = () => {
             <span className="font-display text-lg font-bold text-primary-foreground">Jurova</span>
             <span className="font-body text-[10px] text-primary-foreground/40 ml-2">Portal del Cliente</span>
           </div>
-          <button
-            onClick={() => navigate("/")}
-            className="flex items-center gap-2 font-body text-xs text-primary-foreground/50 hover:text-primary-foreground transition-colors"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            Salir
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => navigate("/cambiar-password")}
+              className="flex items-center gap-2 font-body text-xs text-primary-foreground/50 hover:text-accent transition-colors"
+            >
+              <KeyRound className="w-3.5 h-3.5" />
+              Cambiar contraseña
+            </button>
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 font-body text-xs text-primary-foreground/50 hover:text-primary-foreground transition-colors"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              Salir
+            </button>
+          </div>
         </div>
       </header>
 
