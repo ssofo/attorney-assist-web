@@ -44,7 +44,7 @@ const menuItems = [
   { id: "documentos", icon: Upload, label: "Gestión Documental" },
   { id: "terminos", icon: Clock, label: "Control de Términos" },
   { id: "vencimientos", icon: AlertTriangle, label: "Próximos Vencimientos" },
-  { id: "abogados", icon: Users, label: "Gestión de Abogados" },
+  { id: "abogados", icon: Users, label: "Gestión de Usuarios" },
   { id: "comentarios", icon: MessageSquare, label: "Comentarios Internos" },
   { id: "calendario", icon: CalendarDays, label: "Calendario General" },
   { id: "analitica", icon: BarChart3, label: "Analítica y KPIs" },
