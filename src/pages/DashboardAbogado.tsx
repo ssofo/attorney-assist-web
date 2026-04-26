@@ -266,17 +266,12 @@ const SeccionTerminos = () => {
   );
 };
 
+import { GestionDocumentos } from "@/components/GestionDocumentos";
+
 const SeccionDocumentos = () => (
   <>
-    <SectionHeader title="Gestión Documental" description="Carga de documentos PDF por caso con historial de versiones y acceso controlado" />
-    <div className="bg-card rounded-xl border border-border p-8 text-center">
-      <Upload className="w-10 h-10 text-muted-foreground mx-auto mb-4" />
-      <p className="font-display text-lg font-semibold text-foreground mb-2">Arrastra documentos aquí</p>
-      <p className="font-body text-sm text-muted-foreground">o haz clic para seleccionar archivos PDF</p>
-      <button className="mt-6 gradient-gold text-primary font-body font-semibold px-6 py-2.5 rounded-lg shadow-gold hover:opacity-90 transition-opacity text-sm">
-        Subir Documento
-      </button>
-    </div>
+    <SectionHeader title="Gestión Documental" description="Sube y descarga documentos vinculados a tus casos. Acceso controlado por rol." />
+    <GestionDocumentos mode="abogado" />
   </>
 );
 
