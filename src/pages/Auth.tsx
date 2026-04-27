@@ -24,7 +24,6 @@ type RoleOption = {
 const ROLE_OPTIONS: RoleOption[] = [
   { id: "jefe", icon: Shield, label: "Director", desc: "Control del bufete" },
   { id: "abogado", icon: Briefcase, label: "Abogado", desc: "Casos asignados" },
-  { id: "cliente", icon: User, label: "Cliente", desc: "Mi caso" },
 ];
 
 const ROLE_LABEL: Record<AppRole, string> = {
