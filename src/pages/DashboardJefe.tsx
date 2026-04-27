@@ -816,10 +816,15 @@ const SeccionAbogados = () => {
                     <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center">
                       <Users className="w-4 h-4 text-accent" />
                     </div>
-                    <div>
+                    <div className="flex-1 min-w-0">
                       <p className="font-display text-sm font-semibold text-foreground">{c.full_name}</p>
                       <p className="font-body text-xs text-muted-foreground">{c.email}{c.phone ? ` · ${c.phone}` : ""}</p>
                     </div>
+                    <p className="font-body text-[11px] text-muted-foreground text-right">
+                      {c.last_sign_in_at
+                        ? `Último acceso: ${new Date(c.last_sign_in_at).toLocaleString("es-CO", { dateStyle: "medium", timeStyle: "short" })}`
+                        : "Aún no ha iniciado sesión"}
+                    </p>
                   </div>
                 ))}
               </div>
