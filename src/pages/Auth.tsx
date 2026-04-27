@@ -128,7 +128,7 @@ const Auth = () => {
           {/* Role selection */}
           <div className="mb-5">
             <Label className="font-body text-sm text-foreground mb-3 block">Tipo de acceso</Label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-3">
               {ROLE_OPTIONS.map((opt) => (
                 <button
                   key={opt.id}
