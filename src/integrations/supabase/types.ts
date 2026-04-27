@@ -478,6 +478,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          area_id: string | null
           cedula: string | null
           created_at: string
           email: string
@@ -491,6 +492,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          area_id?: string | null
           cedula?: string | null
           created_at?: string
           email: string
@@ -504,6 +506,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          area_id?: string | null
           cedula?: string | null
           created_at?: string
           email?: string
@@ -517,6 +520,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "profiles_area_id_fkey"
+            columns: ["area_id"]
+            isOneToOne: false
+            referencedRelation: "areas_derecho"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "profiles_especialidad_id_fkey"
             columns: ["especialidad_id"]
