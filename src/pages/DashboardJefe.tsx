@@ -337,7 +337,6 @@ const SeccionAsignacion = () => {
       area_id: form.area_id || null,
       tipo_proceso_id: form.tipo_proceso_id || null,
       cliente_nombre: form.cliente_nombre,
-      juzgado: form.juzgado || null,
       juzgado_id: form.juzgado_id || null,
       abogado_id: form.abogado_id || null,
       observaciones: form.observaciones || null,
@@ -601,8 +600,8 @@ interface AbogadoRow {
   id: string;
   full_name: string;
   email: string;
-  especialidad: string | null;
   area_id: string | null;
+  area_nombre?: string | null;
   phone: string | null;
   last_sign_in_at: string | null;
   sign_in_count: number | null;
@@ -632,9 +631,12 @@ const SeccionAbogados = () => {
     if (ids.length === 0) { setAbogados([]); setClientes([]); setLoading(false); return; }
     const { data } = await supabase
       .from("profiles")
-      .select("id, full_name, email, especialidad, area_id, phone, last_sign_in_at, sign_in_count")
+      .select("id, full_name, email, area_id, phone, last_sign_in_at, sign_in_count")
       .in("id", ids);
-    const profMap = new Map((data ?? []).map((p) => [p.id, p]));
+    const areaMap = new Map((aData ?? []).map((a) => [a.id, a.nombre]));
+    const profMap = new Map(
+      (data ?? []).map((p) => [p.id, { ...p, area_nombre: p.area_id ? areaMap.get(p.area_id) ?? null : null }]),
+    );
     const abos: AbogadoRow[] = [];
     const clis: AbogadoRow[] = [];
     for (const r of roleRows ?? []) {
@@ -785,12 +787,12 @@ const SeccionAbogados = () => {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-display text-sm font-semibold text-foreground">{ab.full_name}</p>
-                      <p className="font-body text-xs text-muted-foreground">{ab.especialidad ?? "Sin área"} · {ab.email}</p>
+                      <p className="font-body text-xs text-muted-foreground">{ab.area_nombre ?? "Sin área"} · {ab.email}</p>
                     </div>
                     <div className="text-right">
                       <p className="font-body text-[11px] text-muted-foreground">
                         {ab.last_sign_in_at
-                          ? `Último acceso: ${new Date(ab.last_sign_in_at).toLocaleString("es-CO", { dateStyle: "medium", timeStyle: "short" })}`
+                          ? `Último acceso: ${new Date(ab.last_sign_in_at).toLocaleString("es-CO", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })}`
                           : "Aún no ha iniciado sesión"}
                       </p>
                       <p className="font-body text-[10px] text-muted-foreground/70">
@@ -822,7 +824,7 @@ const SeccionAbogados = () => {
                     </div>
                     <p className="font-body text-[11px] text-muted-foreground text-right">
                       {c.last_sign_in_at
-                        ? `Último acceso: ${new Date(c.last_sign_in_at).toLocaleString("es-CO", { dateStyle: "medium", timeStyle: "short" })}`
+                        ? `Último acceso: ${new Date(c.last_sign_in_at).toLocaleString("es-CO", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })}`
                         : "Aún no ha iniciado sesión"}
                     </p>
                   </div>

@@ -190,7 +190,6 @@ export type Database = {
           etapa: Database["public"]["Enums"]["case_status"]
           fecha_vencimiento: string | null
           id: string
-          juzgado: string | null
           juzgado_id: string | null
           observaciones: string | null
           radicado: string
@@ -209,7 +208,6 @@ export type Database = {
           etapa?: Database["public"]["Enums"]["case_status"]
           fecha_vencimiento?: string | null
           id?: string
-          juzgado?: string | null
           juzgado_id?: string | null
           observaciones?: string | null
           radicado: string
@@ -228,7 +226,6 @@ export type Database = {
           etapa?: Database["public"]["Enums"]["case_status"]
           fecha_vencimiento?: string | null
           id?: string
-          juzgado?: string | null
           juzgado_id?: string | null
           observaciones?: string | null
           radicado?: string
@@ -423,6 +420,50 @@ export type Database = {
         }
         Relationships: []
       }
+      notificaciones: {
+        Row: {
+          case_id: string | null
+          created_at: string
+          id: string
+          leida: boolean
+          mensaje: string
+          metadata: Json | null
+          tipo: string
+          titulo: string
+          user_id: string
+        }
+        Insert: {
+          case_id?: string | null
+          created_at?: string
+          id?: string
+          leida?: boolean
+          mensaje: string
+          metadata?: Json | null
+          tipo: string
+          titulo: string
+          user_id: string
+        }
+        Update: {
+          case_id?: string | null
+          created_at?: string
+          id?: string
+          leida?: boolean
+          mensaje?: string
+          metadata?: Json | null
+          tipo?: string
+          titulo?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notificaciones_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       partes_procesales: {
         Row: {
           case_id: string
@@ -482,7 +523,6 @@ export type Database = {
           cedula: string | null
           created_at: string
           email: string
-          especialidad: string | null
           especialidad_id: string | null
           full_name: string
           id: string
@@ -496,7 +536,6 @@ export type Database = {
           cedula?: string | null
           created_at?: string
           email: string
-          especialidad?: string | null
           especialidad_id?: string | null
           full_name?: string
           id: string
@@ -510,7 +549,6 @@ export type Database = {
           cedula?: string | null
           created_at?: string
           email?: string
-          especialidad?: string | null
           especialidad_id?: string | null
           full_name?: string
           id?: string
