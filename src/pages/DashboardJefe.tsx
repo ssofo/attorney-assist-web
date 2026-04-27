@@ -787,12 +787,12 @@ const SeccionAbogados = () => {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-display text-sm font-semibold text-foreground">{ab.full_name}</p>
-                      <p className="font-body text-xs text-muted-foreground">{ab.especialidad ?? "Sin área"} · {ab.email}</p>
+                      <p className="font-body text-xs text-muted-foreground">{ab.area_nombre ?? "Sin área"} · {ab.email}</p>
                     </div>
                     <div className="text-right">
                       <p className="font-body text-[11px] text-muted-foreground">
                         {ab.last_sign_in_at
-                          ? `Último acceso: ${new Date(ab.last_sign_in_at).toLocaleString("es-CO", { dateStyle: "medium", timeStyle: "short" })}`
+                          ? `Último acceso: ${new Date(ab.last_sign_in_at).toLocaleString("es-CO", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })}`
                           : "Aún no ha iniciado sesión"}
                       </p>
                       <p className="font-body text-[10px] text-muted-foreground/70">
@@ -824,7 +824,7 @@ const SeccionAbogados = () => {
                     </div>
                     <p className="font-body text-[11px] text-muted-foreground text-right">
                       {c.last_sign_in_at
-                        ? `Último acceso: ${new Date(c.last_sign_in_at).toLocaleString("es-CO", { dateStyle: "medium", timeStyle: "short" })}`
+                        ? `Último acceso: ${new Date(c.last_sign_in_at).toLocaleString("es-CO", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })}`
                         : "Aún no ha iniciado sesión"}
                     </p>
                   </div>
