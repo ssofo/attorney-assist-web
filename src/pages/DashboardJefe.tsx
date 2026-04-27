@@ -334,8 +334,11 @@ const SeccionAsignacion = () => {
     const { error } = await supabase.from("cases").insert({
       radicado: form.radicado,
       tipo: form.tipo,
+      area_id: form.area_id || null,
+      tipo_proceso_id: form.tipo_proceso_id || null,
       cliente_nombre: form.cliente_nombre,
       juzgado: form.juzgado || null,
+      juzgado_id: form.juzgado_id || null,
       abogado_id: form.abogado_id || null,
       observaciones: form.observaciones || null,
       fecha_vencimiento: form.fecha_vencimiento || null,
@@ -348,7 +351,7 @@ const SeccionAsignacion = () => {
       return;
     }
     toast({ title: "Caso asignado", description: `Radicado ${form.radicado} creado correctamente.` });
-    setForm({ radicado: "", tipo: "", cliente_nombre: "", juzgado: "", abogado_id: "", observaciones: "", fecha_vencimiento: "", urgente: false });
+    setForm({ radicado: "", tipo: "", area_id: "", tipo_proceso_id: "", cliente_nombre: "", juzgado: "", juzgado_id: "", abogado_id: "", observaciones: "", fecha_vencimiento: "", urgente: false });
     setPaso(0);
   };
 
