@@ -14,6 +14,136 @@ export type Database = {
   }
   public: {
     Tables: {
+      actuaciones: {
+        Row: {
+          case_id: string
+          created_at: string
+          created_by: string
+          cumplida: boolean
+          descripcion: string
+          fecha: string
+          id: string
+          termino_dias: number | null
+          tipo: string
+          updated_at: string
+          vence_at: string | null
+        }
+        Insert: {
+          case_id: string
+          created_at?: string
+          created_by: string
+          cumplida?: boolean
+          descripcion: string
+          fecha?: string
+          id?: string
+          termino_dias?: number | null
+          tipo: string
+          updated_at?: string
+          vence_at?: string | null
+        }
+        Update: {
+          case_id?: string
+          created_at?: string
+          created_by?: string
+          cumplida?: boolean
+          descripcion?: string
+          fecha?: string
+          id?: string
+          termino_dias?: number | null
+          tipo?: string
+          updated_at?: string
+          vence_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "actuaciones_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      areas_derecho: {
+        Row: {
+          created_at: string
+          descripcion: string | null
+          id: string
+          nombre: string
+        }
+        Insert: {
+          created_at?: string
+          descripcion?: string | null
+          id?: string
+          nombre: string
+        }
+        Update: {
+          created_at?: string
+          descripcion?: string | null
+          id?: string
+          nombre?: string
+        }
+        Relationships: []
+      }
+      audiencias: {
+        Row: {
+          case_id: string
+          created_at: string
+          created_by: string
+          enlace_virtual: string | null
+          fecha_fin: string | null
+          fecha_inicio: string
+          id: string
+          modalidad: string | null
+          notas: string | null
+          resultado: string | null
+          tipo: string | null
+          titulo: string
+          ubicacion: string | null
+          updated_at: string
+        }
+        Insert: {
+          case_id: string
+          created_at?: string
+          created_by: string
+          enlace_virtual?: string | null
+          fecha_fin?: string | null
+          fecha_inicio: string
+          id?: string
+          modalidad?: string | null
+          notas?: string | null
+          resultado?: string | null
+          tipo?: string | null
+          titulo: string
+          ubicacion?: string | null
+          updated_at?: string
+        }
+        Update: {
+          case_id?: string
+          created_at?: string
+          created_by?: string
+          enlace_virtual?: string | null
+          fecha_fin?: string | null
+          fecha_inicio?: string
+          id?: string
+          modalidad?: string | null
+          notas?: string | null
+          resultado?: string | null
+          tipo?: string | null
+          titulo?: string
+          ubicacion?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audiencias_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       case_comments: {
         Row: {
           abogado_id: string | null
@@ -52,6 +182,7 @@ export type Database = {
       cases: {
         Row: {
           abogado_id: string | null
+          area_id: string | null
           cliente_id: string | null
           cliente_nombre: string
           created_at: string
@@ -60,14 +191,17 @@ export type Database = {
           fecha_vencimiento: string | null
           id: string
           juzgado: string | null
+          juzgado_id: string | null
           observaciones: string | null
           radicado: string
           tipo: string
+          tipo_proceso_id: string | null
           updated_at: string
           urgente: boolean
         }
         Insert: {
           abogado_id?: string | null
+          area_id?: string | null
           cliente_id?: string | null
           cliente_nombre: string
           created_at?: string
@@ -76,14 +210,17 @@ export type Database = {
           fecha_vencimiento?: string | null
           id?: string
           juzgado?: string | null
+          juzgado_id?: string | null
           observaciones?: string | null
           radicado: string
           tipo: string
+          tipo_proceso_id?: string | null
           updated_at?: string
           urgente?: boolean
         }
         Update: {
           abogado_id?: string | null
+          area_id?: string | null
           cliente_id?: string | null
           cliente_nombre?: string
           created_at?: string
@@ -92,13 +229,37 @@ export type Database = {
           fecha_vencimiento?: string | null
           id?: string
           juzgado?: string | null
+          juzgado_id?: string | null
           observaciones?: string | null
           radicado?: string
           tipo?: string
+          tipo_proceso_id?: string | null
           updated_at?: string
           urgente?: boolean
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "cases_area_id_fkey"
+            columns: ["area_id"]
+            isOneToOne: false
+            referencedRelation: "areas_derecho"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cases_juzgado_id_fkey"
+            columns: ["juzgado_id"]
+            isOneToOne: false
+            referencedRelation: "juzgados"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cases_tipo_proceso_id_fkey"
+            columns: ["tipo_proceso_id"]
+            isOneToOne: false
+            referencedRelation: "tipos_proceso"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       documents: {
         Row: {
@@ -150,12 +311,178 @@ export type Database = {
           },
         ]
       }
+      especialidades: {
+        Row: {
+          area_id: string | null
+          created_at: string
+          id: string
+          nombre: string
+        }
+        Insert: {
+          area_id?: string | null
+          created_at?: string
+          id?: string
+          nombre: string
+        }
+        Update: {
+          area_id?: string | null
+          created_at?: string
+          id?: string
+          nombre?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "especialidades_area_id_fkey"
+            columns: ["area_id"]
+            isOneToOne: false
+            referencedRelation: "areas_derecho"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      honorarios: {
+        Row: {
+          case_id: string
+          concepto: string
+          created_at: string
+          created_by: string
+          estado: string
+          fecha_emision: string
+          fecha_pago: string | null
+          fecha_vencimiento: string | null
+          id: string
+          metodo_pago: string | null
+          moneda: string
+          monto: number
+          notas: string | null
+          updated_at: string
+        }
+        Insert: {
+          case_id: string
+          concepto: string
+          created_at?: string
+          created_by: string
+          estado?: string
+          fecha_emision?: string
+          fecha_pago?: string | null
+          fecha_vencimiento?: string | null
+          id?: string
+          metodo_pago?: string | null
+          moneda?: string
+          monto: number
+          notas?: string | null
+          updated_at?: string
+        }
+        Update: {
+          case_id?: string
+          concepto?: string
+          created_at?: string
+          created_by?: string
+          estado?: string
+          fecha_emision?: string
+          fecha_pago?: string | null
+          fecha_vencimiento?: string | null
+          id?: string
+          metodo_pago?: string | null
+          moneda?: string
+          monto?: number
+          notas?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "honorarios_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      juzgados: {
+        Row: {
+          ciudad: string | null
+          created_at: string
+          id: string
+          nombre: string
+          tipo: string | null
+        }
+        Insert: {
+          ciudad?: string | null
+          created_at?: string
+          id?: string
+          nombre: string
+          tipo?: string | null
+        }
+        Update: {
+          ciudad?: string | null
+          created_at?: string
+          id?: string
+          nombre?: string
+          tipo?: string | null
+        }
+        Relationships: []
+      }
+      partes_procesales: {
+        Row: {
+          case_id: string
+          created_at: string
+          direccion: string | null
+          email: string | null
+          id: string
+          identificacion: string | null
+          nombre: string
+          notas: string | null
+          rol: string
+          telefono: string | null
+          tipo_identificacion: string | null
+          updated_at: string
+        }
+        Insert: {
+          case_id: string
+          created_at?: string
+          direccion?: string | null
+          email?: string | null
+          id?: string
+          identificacion?: string | null
+          nombre: string
+          notas?: string | null
+          rol: string
+          telefono?: string | null
+          tipo_identificacion?: string | null
+          updated_at?: string
+        }
+        Update: {
+          case_id?: string
+          created_at?: string
+          direccion?: string | null
+          email?: string | null
+          id?: string
+          identificacion?: string | null
+          nombre?: string
+          notas?: string | null
+          rol?: string
+          telefono?: string | null
+          tipo_identificacion?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "partes_procesales_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           cedula: string | null
           created_at: string
           email: string
           especialidad: string | null
+          especialidad_id: string | null
           full_name: string
           id: string
           phone: string | null
@@ -166,6 +493,7 @@ export type Database = {
           created_at?: string
           email: string
           especialidad?: string | null
+          especialidad_id?: string | null
           full_name?: string
           id: string
           phone?: string | null
@@ -176,12 +504,50 @@ export type Database = {
           created_at?: string
           email?: string
           especialidad?: string | null
+          especialidad_id?: string | null
           full_name?: string
           id?: string
           phone?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_especialidad_id_fkey"
+            columns: ["especialidad_id"]
+            isOneToOne: false
+            referencedRelation: "especialidades"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tipos_proceso: {
+        Row: {
+          area_id: string | null
+          created_at: string
+          id: string
+          nombre: string
+        }
+        Insert: {
+          area_id?: string | null
+          created_at?: string
+          id?: string
+          nombre: string
+        }
+        Update: {
+          area_id?: string | null
+          created_at?: string
+          id?: string
+          nombre?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tipos_proceso_area_id_fkey"
+            columns: ["area_id"]
+            isOneToOne: false
+            referencedRelation: "areas_derecho"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {
@@ -209,6 +575,8 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      can_edit_case: { Args: { _case_id: string }; Returns: boolean }
+      can_view_case: { Args: { _case_id: string }; Returns: boolean }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

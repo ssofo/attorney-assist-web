@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import * as tus from "tus-js-client";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -6,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Progress } from "@/components/ui/progress";
 import {
   Select,
   SelectContent,
@@ -14,6 +16,48 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Upload, FileText, Download, Trash2, Send } from "lucide-react";
+
+const MAX_FILE_SIZE = 250 * 1024 * 1024; // 250 MB
+const RESUMABLE_THRESHOLD = 6 * 1024 * 1024; // > 6MB → usar TUS resumable
+
+// Sube un archivo usando el protocolo TUS (resumable) — soporta archivos grandes.
+async function uploadResumable(
+  file: File,
+  path: string,
+  onProgress: (pct: number) => void,
+): Promise<void> {
+  const { data: sess } = await supabase.auth.getSession();
+  const token = sess.session?.access_token;
+  const url = import.meta.env.VITE_SUPABASE_URL as string;
+  const anon = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+  if (!token) throw new Error("Sesión expirada, vuelve a iniciar sesión.");
+
+  return new Promise((resolve, reject) => {
+    const upload = new tus.Upload(file, {
+      endpoint: `${url}/storage/v1/upload/resumable`,
+      retryDelays: [0, 3000, 5000, 10000, 20000],
+      headers: {
+        authorization: `Bearer ${token}`,
+        "x-upsert": "false",
+        apikey: anon,
+      },
+      uploadDataDuringCreation: true,
+      removeFingerprintOnSuccess: true,
+      metadata: {
+        bucketName: "case-documents",
+        objectName: path,
+        contentType: file.type || "application/octet-stream",
+        cacheControl: "3600",
+      },
+      chunkSize: 6 * 1024 * 1024, // 6 MB por chunk (recomendado por Supabase)
+      onError: (err) => reject(err),
+      onProgress: (sent, total) =>
+        onProgress(Math.round((sent / total) * 100)),
+      onSuccess: () => resolve(),
+    });
+    upload.start();
+  });
+}
 
 interface AbogadoOpt {
   id: string;
@@ -58,6 +102,7 @@ export function GestionDocumentos({ mode }: { mode: "jefe" | "abogado" }) {
   const [docs, setDocs] = useState<DocRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState(0);
 
   const [recipient, setRecipient] = useState<string>("");
   const [caseId, setCaseId] = useState<string>("");
@@ -119,10 +164,10 @@ export function GestionDocumentos({ mode }: { mode: "jefe" | "abogado" }) {
       });
       return;
     }
-    if (file.size > 25 * 1024 * 1024) {
+    if (file.size > MAX_FILE_SIZE) {
       toast({
         title: "Archivo muy grande",
-        description: "Máximo 25 MB por archivo",
+        description: "Máximo 250 MB por archivo",
         variant: "destructive",
       });
       return;
@@ -130,24 +175,32 @@ export function GestionDocumentos({ mode }: { mode: "jefe" | "abogado" }) {
     if (!user) return;
 
     setUploading(true);
+    setProgress(0);
 
-    const ext = file.name.split(".").pop() ?? "bin";
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
     const path = `${user.id}/${Date.now()}-${safeName}`;
 
-    const { error: upErr } = await supabase.storage
-      .from("case-documents")
-      .upload(path, file, {
-        cacheControl: "3600",
-        contentType: file.type || "application/octet-stream",
-        upsert: false,
-      });
-
-    if (upErr) {
+    try {
+      if (file.size > RESUMABLE_THRESHOLD) {
+        // Subida resumible (TUS) — para archivos grandes, con reintentos automáticos
+        await uploadResumable(file, path, setProgress);
+      } else {
+        const { error: upErr } = await supabase.storage
+          .from("case-documents")
+          .upload(path, file, {
+            cacheControl: "3600",
+            contentType: file.type || "application/octet-stream",
+            upsert: false,
+          });
+        if (upErr) throw upErr;
+        setProgress(100);
+      }
+    } catch (err) {
       setUploading(false);
+      setProgress(0);
       toast({
         title: "Error al subir",
-        description: upErr.message,
+        description: (err as Error).message ?? "No se pudo subir el archivo",
         variant: "destructive",
       });
       return;
@@ -170,6 +223,7 @@ export function GestionDocumentos({ mode }: { mode: "jefe" | "abogado" }) {
       .insert(insertPayload);
 
     setUploading(false);
+    setProgress(0);
 
     if (dbErr) {
       toast({
@@ -276,7 +330,7 @@ export function GestionDocumentos({ mode }: { mode: "jefe" | "abogado" }) {
                 Arrastra un archivo aquí
               </p>
               <p className="font-body text-xs text-muted-foreground mt-1">
-                o haz clic para seleccionar (PDF, DOCX, JPG · máx 25 MB)
+                o haz clic para seleccionar (PDF, DOCX, JPG · máx 250 MB)
               </p>
             </>
           )}
@@ -288,6 +342,16 @@ export function GestionDocumentos({ mode }: { mode: "jefe" | "abogado" }) {
             className="hidden"
           />
         </div>
+
+        {uploading && (
+          <div className="space-y-1.5">
+            <div className="flex justify-between text-xs font-body text-muted-foreground">
+              <span>Subiendo {file?.name}…</span>
+              <span>{progress}%</span>
+            </div>
+            <Progress value={progress} className="h-2" />
+          </div>
+        )}
 
         <div className="grid sm:grid-cols-2 gap-4">
           {mode === "jefe" && (
