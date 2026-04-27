@@ -102,6 +102,7 @@ export function GestionDocumentos({ mode }: { mode: "jefe" | "abogado" }) {
   const [docs, setDocs] = useState<DocRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState(0);
 
   const [recipient, setRecipient] = useState<string>("");
   const [caseId, setCaseId] = useState<string>("");
