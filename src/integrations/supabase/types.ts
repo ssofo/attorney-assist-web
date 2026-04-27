@@ -485,7 +485,9 @@ export type Database = {
           especialidad_id: string | null
           full_name: string
           id: string
+          last_sign_in_at: string | null
           phone: string | null
+          sign_in_count: number
           updated_at: string
         }
         Insert: {
@@ -496,7 +498,9 @@ export type Database = {
           especialidad_id?: string | null
           full_name?: string
           id: string
+          last_sign_in_at?: string | null
           phone?: string | null
+          sign_in_count?: number
           updated_at?: string
         }
         Update: {
@@ -507,7 +511,9 @@ export type Database = {
           especialidad_id?: string | null
           full_name?: string
           id?: string
+          last_sign_in_at?: string | null
           phone?: string | null
+          sign_in_count?: number
           updated_at?: string
         }
         Relationships: [
@@ -584,6 +590,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      record_sign_in: { Args: never; Returns: undefined }
     }
     Enums: {
       app_role: "jefe" | "abogado" | "cliente"

@@ -1,37 +1,51 @@
 import { useEffect, useState } from "react";
-import { Scale, ArrowLeft } from "lucide-react";
+import { Scale, ArrowLeft, Briefcase, ShieldCheck } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
-
-const signupSchema = z.object({
-  full_name: z.string().trim().min(2, "Nombre muy corto").max(100),
-  email: z.string().trim().email("Email inválido").max(255),
-  password: z.string().min(8, "Mínimo 8 caracteres").max(72),
-  phone: z.string().trim().min(7, "Teléfono inválido").max(20),
-  cedula: z.string().trim().min(5, "Cédula inválida").max(20),
-});
+import { useAuth, type AppRole } from "@/hooks/useAuth";
+import { cn } from "@/lib/utils";
 
 const loginSchema = z.object({
   email: z.string().trim().min(1).email("Email inválido"),
   password: z.string().min(1, "Ingresa tu contraseña"),
 });
 
-type LoginInput = z.infer<typeof loginSchema>;
+type RoleChoice = Extract<AppRole, "jefe" | "abogado">;
+
+const ROLE_OPTIONS: {
+  value: RoleChoice;
+  label: string;
+  description: string;
+  icon: typeof Briefcase;
+}[] = [
+  {
+    value: "jefe",
+    label: "Director",
+    description: "Gestión integral del bufete",
+    icon: ShieldCheck,
+  },
+  {
+    value: "abogado",
+    label: "Abogado",
+    description: "Acceso a casos asignados",
+    icon: Briefcase,
+  },
+];
 
 const Auth = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user, role, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [selectedRole, setSelectedRole] = useState<RoleChoice>("jefe");
+  const [loginData, setLoginData] = useState({ email: "", password: "" });
 
-  // Redirect if already logged in
+  // Redirige si ya está logueado
   useEffect(() => {
     if (!authLoading && user && role) {
       if (role === "jefe") navigate("/dashboard-jefe", { replace: true });
@@ -39,15 +53,6 @@ const Auth = () => {
       else navigate("/mi-caso", { replace: true });
     }
   }, [user, role, authLoading, navigate]);
-
-  const [loginData, setLoginData] = useState({ email: "", password: "" });
-  const [signupData, setSignupData] = useState({
-    full_name: "",
-    email: "",
-    password: "",
-    phone: "",
-    cedula: "",
-  });
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,60 +62,46 @@ const Auth = () => {
       return;
     }
     setLoading(true);
-    const creds: LoginInput = parsed.data;
-    const { error } = await supabase.auth.signInWithPassword({
-      email: creds.email,
-      password: creds.password,
-    });
-    setLoading(false);
-    if (error) {
-      toast({
-        title: "No se pudo iniciar sesión",
-        description: error.message === "Invalid login credentials"
-          ? "Correo o contraseña incorrectos"
-          : error.message,
-        variant: "destructive",
-      });
-      return;
-    }
-    toast({ title: "Bienvenido", description: "Acceso concedido" });
-  };
-
-  const handleSignup = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const parsed = signupSchema.safeParse(signupData);
-    if (!parsed.success) {
-      toast({ title: "Error", description: parsed.error.errors[0].message, variant: "destructive" });
-      return;
-    }
-    setLoading(true);
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email: parsed.data.email,
       password: parsed.data.password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/`,
-        data: {
-          full_name: parsed.data.full_name,
-          phone: parsed.data.phone,
-          cedula: parsed.data.cedula,
-        },
-      },
     });
-    setLoading(false);
-    if (error) {
+
+    if (error || !data.user) {
+      setLoading(false);
       toast({
-        title: "No se pudo crear la cuenta",
-        description: error.message.includes("already")
-          ? "Este correo ya está registrado"
-          : error.message,
+        title: "No se pudo iniciar sesión",
+        description: error?.message === "Invalid login credentials"
+          ? "Correo o contraseña incorrectos"
+          : error?.message ?? "Error desconocido",
         variant: "destructive",
       });
       return;
     }
-    toast({
-      title: "Cuenta creada",
-      description: "Ya puedes iniciar sesión con tus credenciales.",
-    });
+
+    // Verifica que el rol del usuario coincide con el seleccionado
+    const { data: roleRow } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", data.user.id)
+      .maybeSingle();
+
+    if (!roleRow || roleRow.role !== selectedRole) {
+      await supabase.auth.signOut();
+      setLoading(false);
+      toast({
+        title: "Acceso no permitido",
+        description: `Esta cuenta no tiene el rol "${selectedRole === "jefe" ? "Director" : "Abogado"}".`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Registra fecha de ingreso
+    await supabase.rpc("record_sign_in");
+
+    setLoading(false);
+    toast({ title: "Bienvenido", description: "Acceso concedido" });
   };
 
   return (
@@ -134,108 +125,73 @@ const Auth = () => {
             <span className="font-display text-xl font-bold text-foreground">Jurova Legal Group</span>
           </div>
           <p className="font-body text-sm text-muted-foreground mb-6">
-            Accede o crea tu cuenta de cliente
+            Selecciona tu rol e inicia sesión
           </p>
 
-          <Tabs defaultValue="login" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mb-6">
-              <TabsTrigger value="login">Iniciar sesión</TabsTrigger>
-              <TabsTrigger value="signup">Crear cuenta</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="login">
-              <form onSubmit={handleLogin} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="login-email">Correo electrónico</Label>
-                  <Input
-                    id="login-email" type="email" required autoComplete="email"
-                    value={loginData.email}
-                    onChange={(e) => setLoginData({ ...loginData, email: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="login-password">Contraseña</Label>
-                  <Input
-                    id="login-password" type="password" required autoComplete="current-password"
-                    value={loginData.password}
-                    onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
-                  />
-                </div>
-                <Button
-                  type="submit" disabled={loading}
-                  className="w-full gradient-gold text-primary font-body font-semibold h-11 rounded-lg shadow-gold hover:opacity-90 border-0"
+          <div className="grid grid-cols-2 gap-3 mb-6">
+            {ROLE_OPTIONS.map((opt) => {
+              const Icon = opt.icon;
+              const active = selectedRole === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setSelectedRole(opt.value)}
+                  className={cn(
+                    "flex flex-col items-start gap-2 rounded-xl border p-4 text-left transition-all",
+                    active
+                      ? "border-accent bg-accent/10 shadow-gold"
+                      : "border-border hover:border-accent/50 hover:bg-accent/5",
+                  )}
                 >
-                  {loading ? "Ingresando…" : "Iniciar Sesión"}
-                </Button>
-                <p className="font-body text-xs text-center mt-2">
-                  <button
-                    type="button"
-                    onClick={() => navigate("/forgot-password")}
-                    className="text-accent hover:underline"
-                  >
-                    ¿Olvidaste tu contraseña?
-                  </button>
-                </p>
-              </form>
-            </TabsContent>
+                  <Icon className={cn("w-5 h-5", active ? "text-accent" : "text-muted-foreground")} />
+                  <div>
+                    <p className="font-body font-semibold text-sm text-foreground">{opt.label}</p>
+                    <p className="font-body text-[11px] text-muted-foreground leading-tight">
+                      {opt.description}
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
 
-            <TabsContent value="signup">
-              <form onSubmit={handleSignup} className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="su-name">Nombre completo</Label>
-                  <Input
-                    id="su-name" required maxLength={100}
-                    value={signupData.full_name}
-                    onChange={(e) => setSignupData({ ...signupData, full_name: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="su-email">Correo electrónico</Label>
-                  <Input
-                    id="su-email" type="email" required maxLength={255}
-                    value={signupData.email}
-                    onChange={(e) => setSignupData({ ...signupData, email: e.target.value })}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="su-phone">Teléfono</Label>
-                    <Input
-                      id="su-phone" required maxLength={20}
-                      value={signupData.phone}
-                      onChange={(e) => setSignupData({ ...signupData, phone: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="su-cedula">Cédula</Label>
-                    <Input
-                      id="su-cedula" required maxLength={20}
-                      value={signupData.cedula}
-                      onChange={(e) => setSignupData({ ...signupData, cedula: e.target.value })}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="su-password">Contraseña</Label>
-                  <Input
-                    id="su-password" type="password" required minLength={8} maxLength={72}
-                    value={signupData.password}
-                    onChange={(e) => setSignupData({ ...signupData, password: e.target.value })}
-                  />
-                  <p className="text-[11px] text-muted-foreground">Mínimo 8 caracteres</p>
-                </div>
-                <Button
-                  type="submit" disabled={loading}
-                  className="w-full gradient-gold text-primary font-body font-semibold h-11 rounded-lg shadow-gold hover:opacity-90 border-0 mt-2"
-                >
-                  {loading ? "Creando…" : "Crear Cuenta"}
-                </Button>
-                <p className="text-[11px] text-muted-foreground text-center mt-2">
-                  Al registrarte serás registrado como Cliente. Las cuentas de Abogado las crea el Director del bufete.
-                </p>
-              </form>
-            </TabsContent>
-          </Tabs>
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="login-email">Correo electrónico</Label>
+              <Input
+                id="login-email" type="email" required autoComplete="email"
+                value={loginData.email}
+                onChange={(e) => setLoginData({ ...loginData, email: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="login-password">Contraseña</Label>
+              <Input
+                id="login-password" type="password" required autoComplete="current-password"
+                value={loginData.password}
+                onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
+              />
+            </div>
+            <Button
+              type="submit" disabled={loading}
+              className="w-full gradient-gold text-primary font-body font-semibold h-11 rounded-lg shadow-gold hover:opacity-90 border-0"
+            >
+              {loading ? "Ingresando…" : `Iniciar como ${selectedRole === "jefe" ? "Director" : "Abogado"}`}
+            </Button>
+            <p className="font-body text-xs text-center mt-2">
+              <button
+                type="button"
+                onClick={() => navigate("/forgot-password")}
+                className="text-accent hover:underline"
+              >
+                ¿Olvidaste tu contraseña?
+              </button>
+            </p>
+            <p className="text-[11px] text-muted-foreground text-center mt-3 leading-relaxed">
+              Las cuentas son creadas únicamente por el Director del bufete desde el panel de Gestión de Usuarios.
+            </p>
+          </form>
         </div>
       </div>
     </div>

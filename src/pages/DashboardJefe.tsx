@@ -275,11 +275,17 @@ const SeccionAsignacion = () => {
   const [paso, setPaso] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [abogados, setAbogados] = useState<{ id: string; full_name: string; especialidad: string | null }[]>([]);
+  const [areas, setAreas] = useState<{ id: string; nombre: string }[]>([]);
+  const [tiposProceso, setTiposProceso] = useState<{ id: string; nombre: string; area_id: string | null }[]>([]);
+  const [juzgados, setJuzgados] = useState<{ id: string; nombre: string; ciudad: string | null }[]>([]);
   const [form, setForm] = useState({
     radicado: "",
     tipo: "",
+    area_id: "",
+    tipo_proceso_id: "",
     cliente_nombre: "",
     juzgado: "",
+    juzgado_id: "",
     abogado_id: "",
     observaciones: "",
     fecha_vencimiento: "",
@@ -290,11 +296,24 @@ const SeccionAsignacion = () => {
     (async () => {
       const { data: roleRows } = await supabase.from("user_roles").select("user_id").eq("role", "abogado");
       const ids = (roleRows ?? []).map((r) => r.user_id);
-      if (ids.length === 0) { setAbogados([]); return; }
-      const { data } = await supabase.from("profiles").select("id, full_name, especialidad").in("id", ids);
-      setAbogados((data ?? []) as any);
+      if (ids.length > 0) {
+        const { data } = await supabase.from("profiles").select("id, full_name, especialidad").in("id", ids);
+        setAbogados((data ?? []) as any);
+      }
+      const [{ data: aData }, { data: tData }, { data: jData }] = await Promise.all([
+        supabase.from("areas_derecho").select("id, nombre").order("nombre"),
+        supabase.from("tipos_proceso").select("id, nombre, area_id").order("nombre"),
+        supabase.from("juzgados").select("id, nombre, ciudad").order("nombre"),
+      ]);
+      setAreas(aData ?? []);
+      setTiposProceso(tData ?? []);
+      setJuzgados(jData ?? []);
     })();
   }, []);
+
+  const tiposFiltrados = form.area_id
+    ? tiposProceso.filter((t) => t.area_id === form.area_id)
+    : tiposProceso;
 
   const pasos = [
     { label: "Datos del caso", desc: "Información básica del caso" },
@@ -315,8 +334,11 @@ const SeccionAsignacion = () => {
     const { error } = await supabase.from("cases").insert({
       radicado: form.radicado,
       tipo: form.tipo,
+      area_id: form.area_id || null,
+      tipo_proceso_id: form.tipo_proceso_id || null,
       cliente_nombre: form.cliente_nombre,
       juzgado: form.juzgado || null,
+      juzgado_id: form.juzgado_id || null,
       abogado_id: form.abogado_id || null,
       observaciones: form.observaciones || null,
       fecha_vencimiento: form.fecha_vencimiento || null,
@@ -329,7 +351,7 @@ const SeccionAsignacion = () => {
       return;
     }
     toast({ title: "Caso asignado", description: `Radicado ${form.radicado} creado correctamente.` });
-    setForm({ radicado: "", tipo: "", cliente_nombre: "", juzgado: "", abogado_id: "", observaciones: "", fecha_vencimiento: "", urgente: false });
+    setForm({ radicado: "", tipo: "", area_id: "", tipo_proceso_id: "", cliente_nombre: "", juzgado: "", juzgado_id: "", abogado_id: "", observaciones: "", fecha_vencimiento: "", urgente: false });
     setPaso(0);
   };
 
@@ -372,16 +394,56 @@ const SeccionAsignacion = () => {
                 <Input value={form.radicado} onChange={(e) => setForm({ ...form, radicado: e.target.value })} placeholder="Ej: 2024-0960" />
               </div>
               <div className="space-y-2">
-                <Label className="font-body text-sm">Tipo de proceso *</Label>
-                <Input value={form.tipo} onChange={(e) => setForm({ ...form, tipo: e.target.value })} placeholder="Civil, Laboral, Penal..." />
-              </div>
-              <div className="space-y-2">
                 <Label className="font-body text-sm">Cliente *</Label>
                 <Input value={form.cliente_nombre} onChange={(e) => setForm({ ...form, cliente_nombre: e.target.value })} placeholder="Nombre del cliente" />
               </div>
               <div className="space-y-2">
+                <Label className="font-body text-sm">Área de derecho</Label>
+                <Select
+                  value={form.area_id}
+                  onValueChange={(v) => setForm({ ...form, area_id: v, tipo_proceso_id: "", tipo: areas.find((a) => a.id === v)?.nombre ?? form.tipo })}
+                >
+                  <SelectTrigger><SelectValue placeholder="Selecciona un área" /></SelectTrigger>
+                  <SelectContent>
+                    {areas.map((a) => (
+                      <SelectItem key={a.id} value={a.id}>{a.nombre}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="font-body text-sm">Tipo de proceso *</Label>
+                <Select
+                  value={form.tipo_proceso_id}
+                  onValueChange={(v) => {
+                    const t = tiposProceso.find((tp) => tp.id === v);
+                    setForm({ ...form, tipo_proceso_id: v, tipo: t?.nombre ?? form.tipo });
+                  }}
+                >
+                  <SelectTrigger><SelectValue placeholder={form.area_id ? "Selecciona un tipo" : "Elige primero un área"} /></SelectTrigger>
+                  <SelectContent>
+                    {tiposFiltrados.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>{t.nombre}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
                 <Label className="font-body text-sm">Juzgado</Label>
-                <Input value={form.juzgado} onChange={(e) => setForm({ ...form, juzgado: e.target.value })} placeholder="Juzgado asignado" />
+                <Select
+                  value={form.juzgado_id}
+                  onValueChange={(v) => {
+                    const j = juzgados.find((jz) => jz.id === v);
+                    setForm({ ...form, juzgado_id: v, juzgado: j ? `${j.nombre}${j.ciudad ? ` (${j.ciudad})` : ""}` : "" });
+                  }}
+                >
+                  <SelectTrigger><SelectValue placeholder="Selecciona un juzgado" /></SelectTrigger>
+                  <SelectContent>
+                    {juzgados.map((j) => (
+                      <SelectItem key={j.id} value={j.id}>{j.nombre}{j.ciudad ? ` · ${j.ciudad}` : ""}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label className="font-body text-sm">Fecha de vencimiento</Label>
