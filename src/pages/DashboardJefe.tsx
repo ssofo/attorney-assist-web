@@ -275,11 +275,17 @@ const SeccionAsignacion = () => {
   const [paso, setPaso] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [abogados, setAbogados] = useState<{ id: string; full_name: string; especialidad: string | null }[]>([]);
+  const [areas, setAreas] = useState<{ id: string; nombre: string }[]>([]);
+  const [tiposProceso, setTiposProceso] = useState<{ id: string; nombre: string; area_id: string | null }[]>([]);
+  const [juzgados, setJuzgados] = useState<{ id: string; nombre: string; ciudad: string | null }[]>([]);
   const [form, setForm] = useState({
     radicado: "",
     tipo: "",
+    area_id: "",
+    tipo_proceso_id: "",
     cliente_nombre: "",
     juzgado: "",
+    juzgado_id: "",
     abogado_id: "",
     observaciones: "",
     fecha_vencimiento: "",
@@ -290,11 +296,24 @@ const SeccionAsignacion = () => {
     (async () => {
       const { data: roleRows } = await supabase.from("user_roles").select("user_id").eq("role", "abogado");
       const ids = (roleRows ?? []).map((r) => r.user_id);
-      if (ids.length === 0) { setAbogados([]); return; }
-      const { data } = await supabase.from("profiles").select("id, full_name, especialidad").in("id", ids);
-      setAbogados((data ?? []) as any);
+      if (ids.length > 0) {
+        const { data } = await supabase.from("profiles").select("id, full_name, especialidad").in("id", ids);
+        setAbogados((data ?? []) as any);
+      }
+      const [{ data: aData }, { data: tData }, { data: jData }] = await Promise.all([
+        supabase.from("areas_derecho").select("id, nombre").order("nombre"),
+        supabase.from("tipos_proceso").select("id, nombre, area_id").order("nombre"),
+        supabase.from("juzgados").select("id, nombre, ciudad").order("nombre"),
+      ]);
+      setAreas(aData ?? []);
+      setTiposProceso(tData ?? []);
+      setJuzgados(jData ?? []);
     })();
   }, []);
+
+  const tiposFiltrados = form.area_id
+    ? tiposProceso.filter((t) => t.area_id === form.area_id)
+    : tiposProceso;
 
   const pasos = [
     { label: "Datos del caso", desc: "Información básica del caso" },
