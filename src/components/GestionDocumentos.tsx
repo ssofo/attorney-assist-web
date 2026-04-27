@@ -452,6 +452,7 @@ export function GestionDocumentos({ mode }: { mode: "jefe" | "abogado" }) {
           <div className="grid gap-3">
             {docs.map((d) => {
               const isMine = user?.id === d.uploaded_by;
+              const caso = d.case_id ? casos.find((c) => c.id === d.case_id) : null;
               return (
                 <div
                   key={d.id}
@@ -464,6 +465,19 @@ export function GestionDocumentos({ mode }: { mode: "jefe" | "abogado" }) {
                     <p className="font-display text-sm font-semibold text-foreground truncate">
                       {d.file_name}
                     </p>
+                    {caso ? (
+                      <p className="font-body text-[11px] text-accent font-medium mt-0.5 truncate">
+                        Caso #{caso.radicado} · {caso.cliente_nombre}
+                      </p>
+                    ) : d.case_id ? (
+                      <p className="font-body text-[11px] text-muted-foreground mt-0.5">
+                        Caso vinculado (sin acceso)
+                      </p>
+                    ) : (
+                      <p className="font-body text-[11px] text-muted-foreground/70 mt-0.5">
+                        Sin caso asociado
+                      </p>
+                    )}
                     <p className="font-body text-[11px] text-muted-foreground">
                       {formatBytes(d.file_size)} ·{" "}
                       {new Date(d.created_at).toLocaleString("es-CO")}
