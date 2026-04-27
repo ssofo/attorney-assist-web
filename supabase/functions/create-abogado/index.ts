@@ -90,14 +90,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Resolver nombre del área para guardar en `especialidad` (compat)
-    let areaNombre: string | null = body.especialidad ?? null;
-    if (body.area_id) {
-      const { data: a } = await admin
-        .from("areas_derecho").select("nombre").eq("id", body.area_id).maybeSingle();
-      if (a?.nombre) areaNombre = a.nombre;
-    }
-
     const { data: created, error: createErr } = await admin.auth.admin.createUser({
       email: body.email,
       password: body.password,
@@ -106,7 +98,6 @@ Deno.serve(async (req) => {
         full_name: body.full_name,
         phone: body.phone ?? null,
         cedula: body.cedula ?? null,
-        especialidad: areaNombre,
         role: targetRole,
       },
     });
@@ -130,7 +121,6 @@ Deno.serve(async (req) => {
         full_name: body.full_name,
         phone: body.phone ?? null,
         cedula: body.cedula ?? null,
-        especialidad: areaNombre,
         area_id: body.area_id ?? null,
       },
       { onConflict: "id" },
