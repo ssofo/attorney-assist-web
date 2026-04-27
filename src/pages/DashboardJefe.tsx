@@ -394,16 +394,56 @@ const SeccionAsignacion = () => {
                 <Input value={form.radicado} onChange={(e) => setForm({ ...form, radicado: e.target.value })} placeholder="Ej: 2024-0960" />
               </div>
               <div className="space-y-2">
-                <Label className="font-body text-sm">Tipo de proceso *</Label>
-                <Input value={form.tipo} onChange={(e) => setForm({ ...form, tipo: e.target.value })} placeholder="Civil, Laboral, Penal..." />
-              </div>
-              <div className="space-y-2">
                 <Label className="font-body text-sm">Cliente *</Label>
                 <Input value={form.cliente_nombre} onChange={(e) => setForm({ ...form, cliente_nombre: e.target.value })} placeholder="Nombre del cliente" />
               </div>
               <div className="space-y-2">
+                <Label className="font-body text-sm">Área de derecho</Label>
+                <Select
+                  value={form.area_id}
+                  onValueChange={(v) => setForm({ ...form, area_id: v, tipo_proceso_id: "", tipo: areas.find((a) => a.id === v)?.nombre ?? form.tipo })}
+                >
+                  <SelectTrigger><SelectValue placeholder="Selecciona un área" /></SelectTrigger>
+                  <SelectContent>
+                    {areas.map((a) => (
+                      <SelectItem key={a.id} value={a.id}>{a.nombre}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="font-body text-sm">Tipo de proceso *</Label>
+                <Select
+                  value={form.tipo_proceso_id}
+                  onValueChange={(v) => {
+                    const t = tiposProceso.find((tp) => tp.id === v);
+                    setForm({ ...form, tipo_proceso_id: v, tipo: t?.nombre ?? form.tipo });
+                  }}
+                >
+                  <SelectTrigger><SelectValue placeholder={form.area_id ? "Selecciona un tipo" : "Elige primero un área"} /></SelectTrigger>
+                  <SelectContent>
+                    {tiposFiltrados.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>{t.nombre}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
                 <Label className="font-body text-sm">Juzgado</Label>
-                <Input value={form.juzgado} onChange={(e) => setForm({ ...form, juzgado: e.target.value })} placeholder="Juzgado asignado" />
+                <Select
+                  value={form.juzgado_id}
+                  onValueChange={(v) => {
+                    const j = juzgados.find((jz) => jz.id === v);
+                    setForm({ ...form, juzgado_id: v, juzgado: j ? `${j.nombre}${j.ciudad ? ` (${j.ciudad})` : ""}` : "" });
+                  }}
+                >
+                  <SelectTrigger><SelectValue placeholder="Selecciona un juzgado" /></SelectTrigger>
+                  <SelectContent>
+                    {juzgados.map((j) => (
+                      <SelectItem key={j.id} value={j.id}>{j.nombre}{j.ciudad ? ` · ${j.ciudad}` : ""}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label className="font-body text-sm">Fecha de vencimiento</Label>
