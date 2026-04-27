@@ -458,13 +458,26 @@ const SeccionAsignacion = () => {
             </div>
           </div>
         )}
-        {paso === 1 && (
+        {paso === 1 && (() => {
+          const filtrados = form.area_id
+            ? abogados.filter((a) => a.area_id === form.area_id)
+            : abogados;
+          const areaNombre = areas.find((a) => a.id === form.area_id)?.nombre;
+          return (
           <div className="space-y-4">
             <h3 className="font-display text-lg font-semibold text-foreground">Asignar Abogado</h3>
+            {form.area_id && (
+              <p className="font-body text-xs text-muted-foreground">
+                Mostrando abogados especializados en <b>{areaNombre}</b>.
+                {filtrados.length === 0 && " Si ninguno coincide, asígnale el área desde Gestión de Usuarios."}
+              </p>
+            )}
             {abogados.length === 0 ? (
-              <p className="font-body text-sm text-muted-foreground">No hay abogados registrados aún. Crea uno desde "Gestión de Abogados".</p>
+              <p className="font-body text-sm text-muted-foreground">No hay abogados registrados aún. Crea uno desde "Gestión de Usuarios".</p>
+            ) : filtrados.length === 0 ? (
+              <p className="font-body text-sm text-muted-foreground">Ningún abogado tiene esa área asignada todavía.</p>
             ) : (
-              abogados.map((ab) => (
+              filtrados.map((ab) => (
                 <button
                   key={ab.id}
                   type="button"
@@ -478,14 +491,15 @@ const SeccionAsignacion = () => {
                   </div>
                   <div>
                     <p className="font-display text-sm font-semibold text-foreground">{ab.full_name}</p>
-                    <p className="font-body text-xs text-muted-foreground">Especialidad: {ab.especialidad ?? "—"}</p>
+                    <p className="font-body text-xs text-muted-foreground">Área: {ab.especialidad ?? "—"}</p>
                   </div>
                   {form.abogado_id === ab.id && <Check className="w-4 h-4 text-accent ml-auto" />}
                 </button>
               ))
             )}
           </div>
-        )}
+          );
+        })()}
         {paso === 2 && (
           <div className="space-y-4">
             <h3 className="font-display text-lg font-semibold text-foreground">Definir Términos Procesales</h3>
