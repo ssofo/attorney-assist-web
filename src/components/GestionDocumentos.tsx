@@ -164,10 +164,10 @@ export function GestionDocumentos({ mode }: { mode: "jefe" | "abogado" }) {
       });
       return;
     }
-    if (file.size > 25 * 1024 * 1024) {
+    if (file.size > MAX_FILE_SIZE) {
       toast({
         title: "Archivo muy grande",
-        description: "Máximo 25 MB por archivo",
+        description: "Máximo 250 MB por archivo",
         variant: "destructive",
       });
       return;
@@ -175,24 +175,32 @@ export function GestionDocumentos({ mode }: { mode: "jefe" | "abogado" }) {
     if (!user) return;
 
     setUploading(true);
+    setProgress(0);
 
-    const ext = file.name.split(".").pop() ?? "bin";
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
     const path = `${user.id}/${Date.now()}-${safeName}`;
 
-    const { error: upErr } = await supabase.storage
-      .from("case-documents")
-      .upload(path, file, {
-        cacheControl: "3600",
-        contentType: file.type || "application/octet-stream",
-        upsert: false,
-      });
-
-    if (upErr) {
+    try {
+      if (file.size > RESUMABLE_THRESHOLD) {
+        // Subida resumible (TUS) — para archivos grandes, con reintentos automáticos
+        await uploadResumable(file, path, setProgress);
+      } else {
+        const { error: upErr } = await supabase.storage
+          .from("case-documents")
+          .upload(path, file, {
+            cacheControl: "3600",
+            contentType: file.type || "application/octet-stream",
+            upsert: false,
+          });
+        if (upErr) throw upErr;
+        setProgress(100);
+      }
+    } catch (err) {
       setUploading(false);
+      setProgress(0);
       toast({
         title: "Error al subir",
-        description: upErr.message,
+        description: (err as Error).message ?? "No se pudo subir el archivo",
         variant: "destructive",
       });
       return;
@@ -215,6 +223,7 @@ export function GestionDocumentos({ mode }: { mode: "jefe" | "abogado" }) {
       .insert(insertPayload);
 
     setUploading(false);
+    setProgress(0);
 
     if (dbErr) {
       toast({
