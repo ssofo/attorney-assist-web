@@ -274,7 +274,7 @@ const SeccionAsignacion = () => {
   const { user } = useAuth();
   const [paso, setPaso] = useState(0);
   const [submitting, setSubmitting] = useState(false);
-  const [abogados, setAbogados] = useState<{ id: string; full_name: string; especialidad: string | null }[]>([]);
+  const [abogados, setAbogados] = useState<{ id: string; full_name: string; especialidad: string | null; area_id: string | null }[]>([]);
   const [areas, setAreas] = useState<{ id: string; nombre: string }[]>([]);
   const [tiposProceso, setTiposProceso] = useState<{ id: string; nombre: string; area_id: string | null }[]>([]);
   const [juzgados, setJuzgados] = useState<{ id: string; nombre: string; ciudad: string | null }[]>([]);
@@ -297,7 +297,7 @@ const SeccionAsignacion = () => {
       const { data: roleRows } = await supabase.from("user_roles").select("user_id").eq("role", "abogado");
       const ids = (roleRows ?? []).map((r) => r.user_id);
       if (ids.length > 0) {
-        const { data } = await supabase.from("profiles").select("id, full_name, especialidad").in("id", ids);
+        const { data } = await supabase.from("profiles").select("id, full_name, especialidad, area_id").in("id", ids);
         setAbogados((data ?? []) as any);
       }
       const [{ data: aData }, { data: tData }, { data: jData }] = await Promise.all([
