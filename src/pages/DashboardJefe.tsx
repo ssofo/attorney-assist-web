@@ -274,7 +274,7 @@ const SeccionAsignacion = () => {
   const { user } = useAuth();
   const [paso, setPaso] = useState(0);
   const [submitting, setSubmitting] = useState(false);
-  const [abogados, setAbogados] = useState<{ id: string; full_name: string; especialidad: string | null }[]>([]);
+  const [abogados, setAbogados] = useState<{ id: string; full_name: string; especialidad: string | null; area_id: string | null }[]>([]);
   const [areas, setAreas] = useState<{ id: string; nombre: string }[]>([]);
   const [tiposProceso, setTiposProceso] = useState<{ id: string; nombre: string; area_id: string | null }[]>([]);
   const [juzgados, setJuzgados] = useState<{ id: string; nombre: string; ciudad: string | null }[]>([]);
@@ -297,7 +297,7 @@ const SeccionAsignacion = () => {
       const { data: roleRows } = await supabase.from("user_roles").select("user_id").eq("role", "abogado");
       const ids = (roleRows ?? []).map((r) => r.user_id);
       if (ids.length > 0) {
-        const { data } = await supabase.from("profiles").select("id, full_name, especialidad").in("id", ids);
+        const { data } = await supabase.from("profiles").select("id, full_name, especialidad, area_id").in("id", ids);
         setAbogados((data ?? []) as any);
       }
       const [{ data: aData }, { data: tData }, { data: jData }] = await Promise.all([
@@ -458,13 +458,26 @@ const SeccionAsignacion = () => {
             </div>
           </div>
         )}
-        {paso === 1 && (
+        {paso === 1 && (() => {
+          const filtrados = form.area_id
+            ? abogados.filter((a) => a.area_id === form.area_id)
+            : abogados;
+          const areaNombre = areas.find((a) => a.id === form.area_id)?.nombre;
+          return (
           <div className="space-y-4">
             <h3 className="font-display text-lg font-semibold text-foreground">Asignar Abogado</h3>
+            {form.area_id && (
+              <p className="font-body text-xs text-muted-foreground">
+                Mostrando abogados especializados en <b>{areaNombre}</b>.
+                {filtrados.length === 0 && " Si ninguno coincide, asígnale el área desde Gestión de Usuarios."}
+              </p>
+            )}
             {abogados.length === 0 ? (
-              <p className="font-body text-sm text-muted-foreground">No hay abogados registrados aún. Crea uno desde "Gestión de Abogados".</p>
+              <p className="font-body text-sm text-muted-foreground">No hay abogados registrados aún. Crea uno desde "Gestión de Usuarios".</p>
+            ) : filtrados.length === 0 ? (
+              <p className="font-body text-sm text-muted-foreground">Ningún abogado tiene esa área asignada todavía.</p>
             ) : (
-              abogados.map((ab) => (
+              filtrados.map((ab) => (
                 <button
                   key={ab.id}
                   type="button"
@@ -478,14 +491,15 @@ const SeccionAsignacion = () => {
                   </div>
                   <div>
                     <p className="font-display text-sm font-semibold text-foreground">{ab.full_name}</p>
-                    <p className="font-body text-xs text-muted-foreground">Especialidad: {ab.especialidad ?? "—"}</p>
+                    <p className="font-body text-xs text-muted-foreground">Área: {ab.especialidad ?? "—"}</p>
                   </div>
                   {form.abogado_id === ab.id && <Check className="w-4 h-4 text-accent ml-auto" />}
                 </button>
               ))
             )}
           </div>
-        )}
+          );
+        })()}
         {paso === 2 && (
           <div className="space-y-4">
             <h3 className="font-display text-lg font-semibold text-foreground">Definir Términos Procesales</h3>
@@ -588,30 +602,37 @@ interface AbogadoRow {
   full_name: string;
   email: string;
   especialidad: string | null;
+  area_id: string | null;
   phone: string | null;
+  last_sign_in_at: string | null;
+  sign_in_count: number | null;
 }
 
 const SeccionAbogados = () => {
   const { toast } = useToast();
   const [abogados, setAbogados] = useState<AbogadoRow[]>([]);
   const [clientes, setClientes] = useState<AbogadoRow[]>([]);
+  const [areas, setAreas] = useState<{ id: string; nombre: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [createRole, setCreateRole] = useState<"abogado" | "cliente">("abogado");
   const [form, setForm] = useState({
-    full_name: "", email: "", password: "", phone: "", cedula: "", especialidad: "",
+    full_name: "", email: "", password: "", phone: "", cedula: "", area_id: "",
   });
 
   const load = async () => {
     setLoading(true);
-    const { data: roleRows } = await supabase
-      .from("user_roles").select("user_id, role").in("role", ["abogado", "cliente"]);
+    const [{ data: roleRows }, { data: aData }] = await Promise.all([
+      supabase.from("user_roles").select("user_id, role").in("role", ["abogado", "cliente"]),
+      supabase.from("areas_derecho").select("id, nombre").order("nombre"),
+    ]);
+    setAreas(aData ?? []);
     const ids = (roleRows ?? []).map((r) => r.user_id);
     if (ids.length === 0) { setAbogados([]); setClientes([]); setLoading(false); return; }
     const { data } = await supabase
       .from("profiles")
-      .select("id, full_name, email, especialidad, phone")
+      .select("id, full_name, email, especialidad, area_id, phone, last_sign_in_at, sign_in_count")
       .in("id", ids);
     const profMap = new Map((data ?? []).map((p) => [p.id, p]));
     const abos: AbogadoRow[] = [];
@@ -635,10 +656,21 @@ const SeccionAbogados = () => {
       toast({ title: "Error", description: "Contraseña mínima de 8 caracteres", variant: "destructive" });
       return;
     }
+    if (createRole === "abogado" && !form.area_id) {
+      toast({ title: "Falta área", description: "Selecciona el área de derecho del abogado", variant: "destructive" });
+      return;
+    }
     setSubmitting(true);
-    const { data, error } = await supabase.functions.invoke("create-abogado", {
-      body: { ...form, role: createRole },
-    });
+    const payload = {
+      full_name: form.full_name,
+      email: form.email,
+      password: form.password,
+      phone: form.phone,
+      cedula: form.cedula,
+      area_id: createRole === "abogado" ? form.area_id : null,
+      role: createRole,
+    };
+    const { data, error } = await supabase.functions.invoke("create-abogado", { body: payload });
     setSubmitting(false);
     if (error || (data as any)?.error) {
       toast({
@@ -650,7 +682,7 @@ const SeccionAbogados = () => {
     }
     const label = createRole === "cliente" ? "Cliente" : "Abogado";
     toast({ title: `${label} creado`, description: `${form.full_name} ya puede iniciar sesión.` });
-    setForm({ full_name: "", email: "", password: "", phone: "", cedula: "", especialidad: "" });
+    setForm({ full_name: "", email: "", password: "", phone: "", cedula: "", area_id: "" });
     setShowForm(false);
     load();
   };
@@ -705,8 +737,15 @@ const SeccionAbogados = () => {
             </div>
             {createRole === "abogado" && (
               <div className="space-y-1.5">
-                <Label>Especialidad</Label>
-                <Input value={form.especialidad} onChange={(e) => setForm({ ...form, especialidad: e.target.value })} placeholder="Ej. Penal, Administrativo" />
+                <Label>Área de derecho *</Label>
+                <Select value={form.area_id} onValueChange={(v) => setForm({ ...form, area_id: v })}>
+                  <SelectTrigger><SelectValue placeholder="Selecciona un área" /></SelectTrigger>
+                  <SelectContent>
+                    {areas.map((a) => (
+                      <SelectItem key={a.id} value={a.id}>{a.nombre}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             )}
             <div className="space-y-1.5">
@@ -744,9 +783,19 @@ const SeccionAbogados = () => {
                     <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center">
                       <Users className="w-4 h-4 text-accent" />
                     </div>
-                    <div>
+                    <div className="flex-1 min-w-0">
                       <p className="font-display text-sm font-semibold text-foreground">{ab.full_name}</p>
-                      <p className="font-body text-xs text-muted-foreground">{ab.especialidad ?? "Sin especialidad"} · {ab.email}</p>
+                      <p className="font-body text-xs text-muted-foreground">{ab.especialidad ?? "Sin área"} · {ab.email}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-body text-[11px] text-muted-foreground">
+                        {ab.last_sign_in_at
+                          ? `Último acceso: ${new Date(ab.last_sign_in_at).toLocaleString("es-CO", { dateStyle: "medium", timeStyle: "short" })}`
+                          : "Aún no ha iniciado sesión"}
+                      </p>
+                      <p className="font-body text-[10px] text-muted-foreground/70">
+                        Inicios: {ab.sign_in_count ?? 0}
+                      </p>
                     </div>
                   </div>
                 ))}
@@ -767,10 +816,15 @@ const SeccionAbogados = () => {
                     <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center">
                       <Users className="w-4 h-4 text-accent" />
                     </div>
-                    <div>
+                    <div className="flex-1 min-w-0">
                       <p className="font-display text-sm font-semibold text-foreground">{c.full_name}</p>
                       <p className="font-body text-xs text-muted-foreground">{c.email}{c.phone ? ` · ${c.phone}` : ""}</p>
                     </div>
+                    <p className="font-body text-[11px] text-muted-foreground text-right">
+                      {c.last_sign_in_at
+                        ? `Último acceso: ${new Date(c.last_sign_in_at).toLocaleString("es-CO", { dateStyle: "medium", timeStyle: "short" })}`
+                        : "Aún no ha iniciado sesión"}
+                    </p>
                   </div>
                 ))}
               </div>
