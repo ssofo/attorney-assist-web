@@ -602,30 +602,37 @@ interface AbogadoRow {
   full_name: string;
   email: string;
   especialidad: string | null;
+  area_id: string | null;
   phone: string | null;
+  last_sign_in_at: string | null;
+  sign_in_count: number | null;
 }
 
 const SeccionAbogados = () => {
   const { toast } = useToast();
   const [abogados, setAbogados] = useState<AbogadoRow[]>([]);
   const [clientes, setClientes] = useState<AbogadoRow[]>([]);
+  const [areas, setAreas] = useState<{ id: string; nombre: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [createRole, setCreateRole] = useState<"abogado" | "cliente">("abogado");
   const [form, setForm] = useState({
-    full_name: "", email: "", password: "", phone: "", cedula: "", especialidad: "",
+    full_name: "", email: "", password: "", phone: "", cedula: "", area_id: "",
   });
 
   const load = async () => {
     setLoading(true);
-    const { data: roleRows } = await supabase
-      .from("user_roles").select("user_id, role").in("role", ["abogado", "cliente"]);
+    const [{ data: roleRows }, { data: aData }] = await Promise.all([
+      supabase.from("user_roles").select("user_id, role").in("role", ["abogado", "cliente"]),
+      supabase.from("areas_derecho").select("id, nombre").order("nombre"),
+    ]);
+    setAreas(aData ?? []);
     const ids = (roleRows ?? []).map((r) => r.user_id);
     if (ids.length === 0) { setAbogados([]); setClientes([]); setLoading(false); return; }
     const { data } = await supabase
       .from("profiles")
-      .select("id, full_name, email, especialidad, phone")
+      .select("id, full_name, email, especialidad, area_id, phone, last_sign_in_at, sign_in_count")
       .in("id", ids);
     const profMap = new Map((data ?? []).map((p) => [p.id, p]));
     const abos: AbogadoRow[] = [];
@@ -649,10 +656,21 @@ const SeccionAbogados = () => {
       toast({ title: "Error", description: "Contraseña mínima de 8 caracteres", variant: "destructive" });
       return;
     }
+    if (createRole === "abogado" && !form.area_id) {
+      toast({ title: "Falta área", description: "Selecciona el área de derecho del abogado", variant: "destructive" });
+      return;
+    }
     setSubmitting(true);
-    const { data, error } = await supabase.functions.invoke("create-abogado", {
-      body: { ...form, role: createRole },
-    });
+    const payload = {
+      full_name: form.full_name,
+      email: form.email,
+      password: form.password,
+      phone: form.phone,
+      cedula: form.cedula,
+      area_id: createRole === "abogado" ? form.area_id : null,
+      role: createRole,
+    };
+    const { data, error } = await supabase.functions.invoke("create-abogado", { body: payload });
     setSubmitting(false);
     if (error || (data as any)?.error) {
       toast({
@@ -664,7 +682,7 @@ const SeccionAbogados = () => {
     }
     const label = createRole === "cliente" ? "Cliente" : "Abogado";
     toast({ title: `${label} creado`, description: `${form.full_name} ya puede iniciar sesión.` });
-    setForm({ full_name: "", email: "", password: "", phone: "", cedula: "", especialidad: "" });
+    setForm({ full_name: "", email: "", password: "", phone: "", cedula: "", area_id: "" });
     setShowForm(false);
     load();
   };
