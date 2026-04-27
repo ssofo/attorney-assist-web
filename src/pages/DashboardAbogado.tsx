@@ -1,24 +1,62 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-import { KeyRound } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
-  Scale,
-  Briefcase,
-  CalendarDays,
-  BarChart3,
-  Upload,
-  Bell,
-  Users,
-  Clock,
-  LogOut,
-  Menu,
-  X,
-  ChevronRight,
-  FileText,
-  TrendingUp,
-  AlertTriangle,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Scale, Briefcase, CalendarDays, BarChart3, Upload, Bell, Users, Clock,
+  LogOut, Menu, X, ChevronRight, FileText, TrendingUp, AlertTriangle,
+  KeyRound, ArrowLeft, Plus, Video, MapPin, CheckCircle2,
 } from "lucide-react";
+import { GestionDocumentos } from "@/components/GestionDocumentos";
+
+const ETAPAS = ["Creación", "Proyección", "Recaudo Probatorio", "Revisión", "Firma", "Radicado", "Cerrado"] as const;
+type Etapa = typeof ETAPAS[number];
+
+type Caso = {
+  id: string;
+  radicado: string;
+  cliente_nombre: string;
+  tipo: string;
+  etapa: Etapa;
+  urgente: boolean;
+  observaciones: string | null;
+  fecha_vencimiento: string | null;
+  area_id: string | null;
+  juzgado_id: string | null;
+};
+
+type Actuacion = {
+  id: string;
+  case_id: string;
+  tipo: string;
+  descripcion: string;
+  fecha: string;
+  vence_at: string | null;
+  termino_dias: number | null;
+  cumplida: boolean;
+};
+
+type Audiencia = {
+  id: string;
+  case_id: string;
+  titulo: string;
+  tipo: string | null;
+  fecha_inicio: string;
+  modalidad: string | null;
+  enlace_virtual: string | null;
+  ubicacion: string | null;
+};
 
 const menuItems = [
   { id: "casos", icon: Briefcase, label: "Gestión de Casos" },
@@ -32,18 +70,43 @@ const menuItems = [
 
 const DashboardAbogado = () => {
   const navigate = useNavigate();
+  const { signOut, user } = useAuth();
   const [activeSection, setActiveSection] = useState("casos");
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const { signOut } = useAuth();
-  const handleLogout = async () => {
-    await signOut();
-    navigate("/");
+  const [casos, setCasos] = useState<Caso[]>([]);
+  const [actuaciones, setActuaciones] = useState<Actuacion[]>([]);
+  const [audiencias, setAudiencias] = useState<Audiencia[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [openCaseId, setOpenCaseId] = useState<string | null>(null);
+
+  const reload = async () => {
+    if (!user) return;
+    setLoading(true);
+    const { data: cs } = await supabase.from("cases").select("*").eq("abogado_id", user.id).order("created_at", { ascending: false });
+    const ids = (cs ?? []).map((c) => c.id);
+    if (ids.length > 0) {
+      const [{ data: acts }, { data: auds }] = await Promise.all([
+        supabase.from("actuaciones").select("*").in("case_id", ids).order("vence_at", { ascending: true, nullsFirst: false }),
+        supabase.from("audiencias").select("*").in("case_id", ids).order("fecha_inicio", { ascending: true }),
+      ]);
+      setActuaciones((acts ?? []) as any);
+      setAudiencias((auds ?? []) as any);
+    } else {
+      setActuaciones([]); setAudiencias([]);
+    }
+    setCasos((cs ?? []) as any);
+    setLoading(false);
   };
+
+  useEffect(() => { reload(); /* eslint-disable-next-line */ }, [user?.id]);
+
+  const handleLogout = async () => { await signOut(); navigate("/"); };
+  const openCaso = casos.find((c) => c.id === openCaseId) ?? null;
 
   return (
     <div className="min-h-screen bg-background flex">
-      {/* Sidebar - Desktop */}
+      {/* Sidebar Desktop */}
       <aside className="hidden md:flex w-64 gradient-navy flex-col border-r border-accent/10 fixed inset-y-0 left-0 z-30">
         <div className="p-5 border-b border-accent/10">
           <div className="flex items-center gap-2">
@@ -56,7 +119,7 @@ const DashboardAbogado = () => {
           {menuItems.map((item) => (
             <button
               key={item.id}
-              onClick={() => setActiveSection(item.id)}
+              onClick={() => { setActiveSection(item.id); setOpenCaseId(null); }}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-body text-sm transition-colors ${
                 activeSection === item.id
                   ? "bg-accent/15 text-accent"
@@ -69,19 +132,11 @@ const DashboardAbogado = () => {
           ))}
         </nav>
         <div className="p-3 border-t border-accent/10 space-y-1">
-          <button
-            onClick={() => navigate("/cambiar-password")}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-body text-sm text-primary-foreground/60 hover:text-primary-foreground hover:bg-accent/5 transition-colors"
-          >
-            <KeyRound className="w-4 h-4" />
-            Cambiar contraseña
+          <button onClick={() => navigate("/cambiar-password")} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-body text-sm text-primary-foreground/60 hover:text-primary-foreground hover:bg-accent/5 transition-colors">
+            <KeyRound className="w-4 h-4" /> Cambiar contraseña
           </button>
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-body text-sm text-primary-foreground/40 hover:text-primary-foreground hover:bg-accent/5 transition-colors"
-          >
-            <LogOut className="w-4 h-4" />
-            Cerrar Sesión
+          <button onClick={handleLogout} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-body text-sm text-primary-foreground/40 hover:text-primary-foreground hover:bg-accent/5 transition-colors">
+            <LogOut className="w-4 h-4" /> Cerrar Sesión
           </button>
         </div>
       </aside>
@@ -97,67 +152,50 @@ const DashboardAbogado = () => {
         </button>
       </div>
 
-      {/* Mobile Sidebar Overlay */}
       {sidebarOpen && (
         <div className="md:hidden fixed inset-0 z-30">
           <div className="absolute inset-0 bg-foreground/50" onClick={() => setSidebarOpen(false)} />
           <aside className="absolute left-0 top-14 bottom-0 w-64 gradient-navy border-r border-accent/10 flex flex-col">
             <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
               {menuItems.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    setActiveSection(item.id);
-                    setSidebarOpen(false);
-                  }}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-body text-sm transition-colors ${
-                    activeSection === item.id
-                      ? "bg-accent/15 text-accent"
-                      : "text-primary-foreground/60 hover:text-primary-foreground hover:bg-accent/5"
-                  }`}
-                >
-                  <item.icon className="w-4 h-4 flex-shrink-0" />
-                  {item.label}
+                <button key={item.id} onClick={() => { setActiveSection(item.id); setOpenCaseId(null); setSidebarOpen(false); }}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-body text-sm transition-colors ${activeSection === item.id ? "bg-accent/15 text-accent" : "text-primary-foreground/60 hover:text-primary-foreground hover:bg-accent/5"}`}>
+                  <item.icon className="w-4 h-4 flex-shrink-0" />{item.label}
                 </button>
               ))}
             </nav>
             <div className="p-3 border-t border-accent/10 space-y-1">
-              <button
-                onClick={() => { navigate("/cambiar-password"); setSidebarOpen(false); }}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-body text-sm text-primary-foreground/60 hover:text-primary-foreground hover:bg-accent/5 transition-colors"
-              >
-                <KeyRound className="w-4 h-4" />
-                Cambiar contraseña
-              </button>
-              <button
-                onClick={handleLogout}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-body text-sm text-primary-foreground/40 hover:text-primary-foreground hover:bg-accent/5 transition-colors"
-              >
-                <LogOut className="w-4 h-4" />
-                Cerrar Sesión
-              </button>
+              <button onClick={() => { navigate("/cambiar-password"); setSidebarOpen(false); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-body text-sm text-primary-foreground/60 hover:text-primary-foreground hover:bg-accent/5"><KeyRound className="w-4 h-4" />Cambiar contraseña</button>
+              <button onClick={handleLogout} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-body text-sm text-primary-foreground/40 hover:text-primary-foreground hover:bg-accent/5"><LogOut className="w-4 h-4" />Cerrar Sesión</button>
             </div>
           </aside>
         </div>
       )}
 
-      {/* Main Content */}
+      {/* Main */}
       <main className="flex-1 md:ml-64 pt-14 md:pt-0">
         <div className="p-6 md:p-8">
-          {activeSection === "casos" && <SeccionCasos />}
-          {activeSection === "calendario" && <SeccionCalendario />}
-          {activeSection === "terminos" && <SeccionTerminos />}
-          {activeSection === "documentos" && <SeccionDocumentos />}
-          {activeSection === "analitica" && <SeccionAnalitica />}
-          {activeSection === "notificaciones" && <SeccionNotificaciones />}
-          {activeSection === "clientes" && <SeccionClientes />}
+          {activeSection === "casos" && (
+            openCaso
+              ? <CaseDetail caso={openCaso} actuaciones={actuaciones.filter(a => a.case_id === openCaso.id)} audiencias={audiencias.filter(a => a.case_id === openCaso.id)} onBack={() => setOpenCaseId(null)} onChanged={reload} userId={user?.id ?? ""} />
+              : <SeccionCasos casos={casos} loading={loading} onOpen={setOpenCaseId} />
+          )}
+          {activeSection === "calendario" && <SeccionCalendario casos={casos} audiencias={audiencias} />}
+          {activeSection === "terminos" && <SeccionTerminos casos={casos} actuaciones={actuaciones} />}
+          {activeSection === "documentos" && (
+            <>
+              <SectionHeader title="Gestión Documental" description="Sube y descarga documentos vinculados a tus casos." />
+              <GestionDocumentos mode="abogado" />
+            </>
+          )}
+          {activeSection === "analitica" && <SeccionAnalitica casos={casos} actuaciones={actuaciones} audiencias={audiencias} />}
+          {activeSection === "notificaciones" && <SeccionNotificaciones casos={casos} actuaciones={actuaciones} audiencias={audiencias} />}
+          {activeSection === "clientes" && <SeccionClientes casos={casos} />}
         </div>
       </main>
     </div>
   );
 };
-
-/* ── Section Components ── */
 
 const SectionHeader = ({ title, description }: { title: string; description: string }) => (
   <div className="mb-8">
@@ -166,20 +204,22 @@ const SectionHeader = ({ title, description }: { title: string; description: str
   </div>
 );
 
-const SeccionCasos = () => {
-  const casos = [
-    { id: "2024-0847", cliente: "María Fernández", etapa: "Proyección", tipo: "Civil", urgente: false },
-    { id: "2024-0912", cliente: "Carlos Ruiz", etapa: "Recaudo Probatorio", tipo: "Laboral", urgente: true },
-    { id: "2024-0935", cliente: "Ana Gómez", etapa: "Revisión", tipo: "Familiar", urgente: false },
-    { id: "2024-0950", cliente: "José Martínez", etapa: "Creación", tipo: "Penal", urgente: true },
-  ];
-
-  return (
-    <>
-      <SectionHeader title="Gestión de Casos" description="Administra todos los casos asignados y su flujo de trabajo" />
+/* ── Sección Casos ── */
+const SeccionCasos = ({ casos, loading, onOpen }: { casos: Caso[]; loading: boolean; onOpen: (id: string) => void }) => (
+  <>
+    <SectionHeader title="Gestión de Casos" description="Administra todos los casos asignados y su flujo de trabajo" />
+    {loading ? (
+      <p className="font-body text-sm text-muted-foreground">Cargando casos...</p>
+    ) : casos.length === 0 ? (
+      <div className="bg-card rounded-xl border border-border p-10 text-center">
+        <Briefcase className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+        <p className="font-display text-base font-semibold text-foreground">Sin casos asignados</p>
+        <p className="font-body text-xs text-muted-foreground mt-1">El director te asignará casos próximamente.</p>
+      </div>
+    ) : (
       <div className="grid gap-4">
         {casos.map((caso) => (
-          <div key={caso.id} className="bg-card rounded-xl border border-border p-5 hover:border-accent/30 hover:shadow-luxury transition-all cursor-pointer">
+          <button key={caso.id} onClick={() => onOpen(caso.id)} className="text-left bg-card rounded-xl border border-border p-5 hover:border-accent/30 hover:shadow-luxury transition-all">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="w-10 h-10 rounded-lg gradient-navy flex items-center justify-center">
@@ -187,12 +227,10 @@ const SeccionCasos = () => {
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <p className="font-display text-base font-semibold text-foreground">Caso #{caso.id}</p>
-                    {caso.urgente && (
-                      <span className="text-[10px] font-body px-2 py-0.5 rounded-full bg-destructive/10 text-destructive font-medium">Urgente</span>
-                    )}
+                    <p className="font-display text-base font-semibold text-foreground">Caso {caso.radicado}</p>
+                    {caso.urgente && <span className="text-[10px] font-body px-2 py-0.5 rounded-full bg-destructive/10 text-destructive font-medium">Urgente</span>}
                   </div>
-                  <p className="font-body text-xs text-muted-foreground">{caso.cliente} · {caso.tipo}</p>
+                  <p className="font-body text-xs text-muted-foreground">{caso.cliente_nombre} · {caso.tipo}</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -200,141 +238,321 @@ const SeccionCasos = () => {
                 <ChevronRight className="w-4 h-4 text-muted-foreground" />
               </div>
             </div>
-          </div>
+          </button>
         ))}
+      </div>
+    )}
+  </>
+);
+
+/* ── Detalle de Caso ── */
+const CaseDetail = ({ caso, actuaciones, audiencias, onBack, onChanged, userId }: {
+  caso: Caso; actuaciones: Actuacion[]; audiencias: Audiencia[];
+  onBack: () => void; onChanged: () => void; userId: string;
+}) => {
+  const { toast } = useToast();
+  const [etapa, setEtapa] = useState<Etapa>(caso.etapa);
+  const [savingEtapa, setSavingEtapa] = useState(false);
+
+  const [newAct, setNewAct] = useState({ tipo: "", descripcion: "", vence_at: "", termino_dias: "" });
+  const [savingAct, setSavingAct] = useState(false);
+  const [openActDialog, setOpenActDialog] = useState(false);
+
+  const [newAud, setNewAud] = useState({ titulo: "", tipo: "audiencia", fecha_inicio: "", modalidad: "presencial", enlace_virtual: "", ubicacion: "" });
+  const [savingAud, setSavingAud] = useState(false);
+  const [openAudDialog, setOpenAudDialog] = useState(false);
+
+  const cambiarEtapa = async (nueva: Etapa) => {
+    setEtapa(nueva); setSavingEtapa(true);
+    const { error } = await supabase.from("cases").update({ etapa: nueva as any }).eq("id", caso.id);
+    setSavingEtapa(false);
+    if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
+    toast({ title: "Etapa actualizada", description: `El caso ahora está en ${nueva}.` });
+    onChanged();
+  };
+
+  const crearActuacion = async () => {
+    if (!newAct.tipo || !newAct.descripcion) { toast({ title: "Faltan datos", description: "Tipo y descripción son obligatorios", variant: "destructive" }); return; }
+    setSavingAct(true);
+    const { error } = await supabase.from("actuaciones").insert({
+      case_id: caso.id, tipo: newAct.tipo, descripcion: newAct.descripcion,
+      vence_at: newAct.vence_at || null, termino_dias: newAct.termino_dias ? Number(newAct.termino_dias) : null,
+      created_by: userId,
+    });
+    setSavingAct(false);
+    if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
+    toast({ title: "Actuación registrada" });
+    setNewAct({ tipo: "", descripcion: "", vence_at: "", termino_dias: "" });
+    setOpenActDialog(false);
+    onChanged();
+  };
+
+  const marcarCumplida = async (act: Actuacion) => {
+    const { error } = await supabase.from("actuaciones").update({ cumplida: !act.cumplida }).eq("id", act.id);
+    if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
+    onChanged();
+  };
+
+  const crearAudiencia = async () => {
+    if (!newAud.titulo || !newAud.fecha_inicio) { toast({ title: "Faltan datos", description: "Título y fecha son obligatorios", variant: "destructive" }); return; }
+    setSavingAud(true);
+    const { error } = await supabase.from("audiencias").insert({
+      case_id: caso.id, titulo: newAud.titulo, tipo: newAud.tipo,
+      fecha_inicio: new Date(newAud.fecha_inicio).toISOString(),
+      modalidad: newAud.modalidad,
+      enlace_virtual: newAud.enlace_virtual || null,
+      ubicacion: newAud.ubicacion || null,
+      created_by: userId,
+    });
+    setSavingAud(false);
+    if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
+    toast({ title: "Audiencia agendada" });
+    setNewAud({ titulo: "", tipo: "audiencia", fecha_inicio: "", modalidad: "presencial", enlace_virtual: "", ubicacion: "" });
+    setOpenAudDialog(false);
+    onChanged();
+  };
+
+  return (
+    <>
+      <button onClick={onBack} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-4">
+        <ArrowLeft className="w-4 h-4" /> Volver a casos
+      </button>
+
+      <div className="flex items-start justify-between mb-6 gap-4 flex-wrap">
+        <div>
+          <div className="flex items-center gap-2">
+            <h1 className="font-display text-2xl font-bold text-foreground">Caso {caso.radicado}</h1>
+            {caso.urgente && <span className="text-[10px] font-body px-2 py-0.5 rounded-full bg-destructive/10 text-destructive font-medium">Urgente</span>}
+          </div>
+          <p className="font-body text-sm text-muted-foreground mt-1">{caso.cliente_nombre} · {caso.tipo}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Label className="text-xs">Etapa:</Label>
+          <Select value={etapa} onValueChange={(v) => cambiarEtapa(v as Etapa)} disabled={savingEtapa}>
+            <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {ETAPAS.map((e) => <SelectItem key={e} value={e}>{e}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {caso.observaciones && (
+        <div className="bg-muted/30 rounded-lg border border-border p-4 mb-6">
+          <p className="font-body text-xs uppercase tracking-wider text-muted-foreground mb-1">Observaciones del jefe</p>
+          <p className="font-body text-sm text-foreground">{caso.observaciones}</p>
+        </div>
+      )}
+
+      <div className="grid lg:grid-cols-2 gap-6">
+        {/* Actuaciones */}
+        <div className="bg-card rounded-xl border border-border p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-display text-lg font-semibold text-foreground">Actuaciones</h2>
+            <Dialog open={openActDialog} onOpenChange={setOpenActDialog}>
+              <DialogTrigger asChild><Button size="sm" variant="outline"><Plus className="w-4 h-4 mr-1" />Nueva</Button></DialogTrigger>
+              <DialogContent>
+                <DialogHeader><DialogTitle>Nueva actuación</DialogTitle></DialogHeader>
+                <div className="space-y-3">
+                  <div><Label>Tipo</Label><Input value={newAct.tipo} onChange={(e) => setNewAct({ ...newAct, tipo: e.target.value })} placeholder="Ej. Memorial, Auto, Notificación" /></div>
+                  <div><Label>Descripción</Label><Textarea value={newAct.descripcion} onChange={(e) => setNewAct({ ...newAct, descripcion: e.target.value })} /></div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label>Vence el</Label><Input type="date" value={newAct.vence_at} onChange={(e) => setNewAct({ ...newAct, vence_at: e.target.value })} /></div>
+                    <div><Label>Término (días)</Label><Input type="number" value={newAct.termino_dias} onChange={(e) => setNewAct({ ...newAct, termino_dias: e.target.value })} /></div>
+                  </div>
+                  <Button onClick={crearActuacion} disabled={savingAct} className="w-full">{savingAct ? "Guardando..." : "Crear actuación"}</Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+          {actuaciones.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Sin actuaciones registradas.</p>
+          ) : (
+            <ul className="space-y-3">
+              {actuaciones.map((a) => (
+                <li key={a.id} className="border border-border rounded-lg p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1">
+                      <p className="font-body text-sm font-semibold text-foreground">{a.tipo}</p>
+                      <p className="font-body text-xs text-muted-foreground mt-0.5">{a.descripcion}</p>
+                      <div className="flex items-center gap-3 mt-2 text-[11px] text-muted-foreground">
+                        <span>Fecha: {new Date(a.fecha).toLocaleDateString("es-CO")}</span>
+                        {a.vence_at && <span>Vence: {new Date(a.vence_at).toLocaleDateString("es-CO")}</span>}
+                      </div>
+                    </div>
+                    <button onClick={() => marcarCumplida(a)} className={`p-1.5 rounded-md ${a.cumplida ? "bg-accent/15 text-accent" : "bg-muted text-muted-foreground hover:text-foreground"}`} title={a.cumplida ? "Marcar pendiente" : "Marcar cumplida"}>
+                      <CheckCircle2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {/* Audiencias */}
+        <div className="bg-card rounded-xl border border-border p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-display text-lg font-semibold text-foreground">Audiencias</h2>
+            <Dialog open={openAudDialog} onOpenChange={setOpenAudDialog}>
+              <DialogTrigger asChild><Button size="sm" variant="outline"><Plus className="w-4 h-4 mr-1" />Agendar</Button></DialogTrigger>
+              <DialogContent>
+                <DialogHeader><DialogTitle>Nueva audiencia</DialogTitle></DialogHeader>
+                <div className="space-y-3">
+                  <div><Label>Título</Label><Input value={newAud.titulo} onChange={(e) => setNewAud({ ...newAud, titulo: e.target.value })} /></div>
+                  <div><Label>Fecha y hora</Label><Input type="datetime-local" value={newAud.fecha_inicio} onChange={(e) => setNewAud({ ...newAud, fecha_inicio: e.target.value })} /></div>
+                  <div>
+                    <Label>Modalidad</Label>
+                    <Select value={newAud.modalidad} onValueChange={(v) => setNewAud({ ...newAud, modalidad: v })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="presencial">Presencial</SelectItem>
+                        <SelectItem value="virtual">Virtual</SelectItem>
+                        <SelectItem value="mixta">Mixta</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {newAud.modalidad !== "presencial" && (
+                    <div><Label>Enlace virtual</Label><Input value={newAud.enlace_virtual} onChange={(e) => setNewAud({ ...newAud, enlace_virtual: e.target.value })} placeholder="https://meet.google.com/..." /></div>
+                  )}
+                  {newAud.modalidad !== "virtual" && (
+                    <div><Label>Ubicación</Label><Input value={newAud.ubicacion} onChange={(e) => setNewAud({ ...newAud, ubicacion: e.target.value })} placeholder="Sala 3, Palacio de Justicia" /></div>
+                  )}
+                  <Button onClick={crearAudiencia} disabled={savingAud} className="w-full">{savingAud ? "Guardando..." : "Agendar audiencia"}</Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+          {audiencias.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Sin audiencias programadas.</p>
+          ) : (
+            <ul className="space-y-3">
+              {audiencias.map((a) => (
+                <li key={a.id} className="border border-border rounded-lg p-3">
+                  <p className="font-body text-sm font-semibold text-foreground">{a.titulo}</p>
+                  <p className="font-body text-xs text-muted-foreground mt-1">{new Date(a.fecha_inicio).toLocaleString("es-CO", { dateStyle: "medium", timeStyle: "short" })}</p>
+                  <div className="flex items-center gap-3 mt-2 text-[11px] text-muted-foreground">
+                    {a.modalidad === "virtual" || a.enlace_virtual ? (
+                      <a href={a.enlace_virtual ?? "#"} target="_blank" rel="noopener" className="flex items-center gap-1 text-accent hover:underline">
+                        <Video className="w-3 h-3" /> Abrir enlace
+                      </a>
+                    ) : null}
+                    {a.ubicacion && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{a.ubicacion}</span>}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
     </>
   );
 };
 
-const SeccionCalendario = () => {
-  const eventos = [
-    { fecha: "15 Abr 2026", caso: "#2024-0847", tipo: "Audiencia", hora: "9:00 AM", link: true },
-    { fecha: "18 Abr 2026", caso: "#2024-0912", tipo: "Entrega de documentos", hora: "5:00 PM", link: false },
-    { fecha: "22 Abr 2026", caso: "#2024-0935", tipo: "Audiencia virtual", hora: "10:30 AM", link: true },
-  ];
-
+/* ── Calendario ── */
+const SeccionCalendario = ({ casos, audiencias }: { casos: Caso[]; audiencias: Audiencia[] }) => {
+  const casoMap = useMemo(() => Object.fromEntries(casos.map(c => [c.id, c.radicado])), [casos]);
+  const futuras = audiencias.filter(a => new Date(a.fecha_inicio) >= new Date()).slice(0, 50);
   return (
     <>
-      <SectionHeader title="Calendario de Audiencias" description="Fechas de audiencias, links de videoconferencia y plazos de entrega" />
-      <div className="grid gap-4">
-        {eventos.map((ev, i) => (
-          <div key={i} className="bg-card rounded-xl border border-border p-5">
-            <div className="flex items-center justify-between">
+      <SectionHeader title="Calendario de Audiencias" description="Audiencias programadas en tus casos" />
+      {futuras.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No hay audiencias programadas.</p>
+      ) : (
+        <div className="grid gap-4">
+          {futuras.map((ev) => (
+            <div key={ev.id} className="bg-card rounded-xl border border-border p-5 flex items-center justify-between gap-4">
               <div className="flex items-center gap-4">
-                <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center">
-                  <CalendarDays className="w-4 h-4 text-accent" />
-                </div>
+                <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center"><CalendarDays className="w-4 h-4 text-accent" /></div>
                 <div>
-                  <p className="font-display text-base font-semibold text-foreground">{ev.tipo}</p>
-                  <p className="font-body text-xs text-muted-foreground">Caso {ev.caso} · {ev.hora}</p>
+                  <p className="font-display text-base font-semibold text-foreground">{ev.titulo}</p>
+                  <p className="font-body text-xs text-muted-foreground">Caso {casoMap[ev.case_id] ?? "—"} · {ev.modalidad}</p>
                 </div>
               </div>
               <div className="text-right">
-                <p className="font-body text-sm font-medium text-foreground">{ev.fecha}</p>
-                {ev.link && <p className="font-body text-[10px] text-accent underline cursor-pointer mt-1">Abrir link de videoconferencia</p>}
+                <p className="font-body text-sm font-medium text-foreground">{new Date(ev.fecha_inicio).toLocaleString("es-CO", { dateStyle: "medium", timeStyle: "short" })}</p>
+                {ev.enlace_virtual && <a href={ev.enlace_virtual} target="_blank" rel="noopener" className="font-body text-[10px] text-accent underline">Abrir videoconferencia</a>}
               </div>
             </div>
-          </div>
-        ))}
-      </div>
-    </>
-  );
-};
-
-const SeccionTerminos = () => {
-  const terminos = [
-    { caso: "#2024-0847", etapa: "Proyección", diasRestantes: 3, total: 10 },
-    { caso: "#2024-0912", etapa: "Recaudo Probatorio", diasRestantes: 1, total: 15 },
-    { caso: "#2024-0935", etapa: "Revisión", diasRestantes: 7, total: 8 },
-  ];
-
-  return (
-    <>
-      <SectionHeader title="Control de Términos" description="Monitorea los plazos procesales de cada caso y área" />
-      <div className="grid gap-4">
-        {terminos.map((t, i) => {
-          const pct = ((t.total - t.diasRestantes) / t.total) * 100;
-          const urgente = t.diasRestantes <= 2;
-          return (
-            <div key={i} className="bg-card rounded-xl border border-border p-5">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-3">
-                  {urgente && <AlertTriangle className="w-4 h-4 text-destructive" />}
-                  <div>
-                    <p className="font-display text-base font-semibold text-foreground">Caso {t.caso}</p>
-                    <p className="font-body text-xs text-muted-foreground">{t.etapa}</p>
-                  </div>
-                </div>
-                <span className={`font-body text-sm font-semibold ${urgente ? "text-destructive" : "text-foreground"}`}>
-                  {t.diasRestantes} días restantes
-                </span>
-              </div>
-              <div className="w-full h-2 rounded-full bg-muted">
-                <div
-                  className={`h-2 rounded-full transition-all ${urgente ? "bg-destructive" : "bg-accent"}`}
-                  style={{ width: `${pct}%` }}
-                />
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </>
-  );
-};
-
-import { GestionDocumentos } from "@/components/GestionDocumentos";
-
-const SeccionDocumentos = () => (
-  <>
-    <SectionHeader title="Gestión Documental" description="Sube y descarga documentos vinculados a tus casos. Acceso controlado por rol." />
-    <GestionDocumentos mode="abogado" />
-  </>
-);
-
-const SeccionAnalitica = () => (
-  <>
-    <SectionHeader title="Analítica y KPIs" description="Indicadores de rendimiento del bufete y carga laboral" />
-    <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-      {[
-        { label: "Casos Activos", value: "124", trend: "+12%" },
-        { label: "Tiempo Promedio Resolución", value: "45 días", trend: "-8%" },
-        { label: "Tasa de Éxito", value: "94%", trend: "+2%" },
-        { label: "Carga Promedio", value: "8 casos", trend: "0%" },
-      ].map((kpi) => (
-        <div key={kpi.label} className="bg-card rounded-xl border border-border p-5">
-          <p className="font-body text-xs text-muted-foreground uppercase tracking-wider">{kpi.label}</p>
-          <p className="font-display text-2xl font-bold text-foreground mt-2">{kpi.value}</p>
-          <div className="flex items-center gap-1 mt-2">
-            <TrendingUp className="w-3 h-3 text-accent" />
-            <span className="font-body text-xs text-accent">{kpi.trend}</span>
-          </div>
+          ))}
         </div>
-      ))}
-    </div>
-  </>
-);
+      )}
+    </>
+  );
+};
 
-const SeccionNotificaciones = () => {
-  const notifs = [
-    { msg: "Audiencia del caso #2024-0847 en 2 días", tipo: "audiencia", tiempo: "Hace 1 hora" },
-    { msg: "Documento pendiente de revisión - Caso #2024-0912", tipo: "documento", tiempo: "Hace 3 horas" },
-    { msg: "Término procesal próximo a vencer - Caso #2024-0912", tipo: "alerta", tiempo: "Hace 5 horas" },
-    { msg: "Nuevo caso asignado: #2024-0950", tipo: "caso", tiempo: "Ayer" },
+/* ── Términos ── */
+const SeccionTerminos = ({ casos, actuaciones }: { casos: Caso[]; actuaciones: Actuacion[] }) => {
+  const casoMap = useMemo(() => Object.fromEntries(casos.map(c => [c.id, c])), [casos]);
+  const pendientes = actuaciones.filter(a => a.vence_at && !a.cumplida);
+  const today = new Date(); today.setHours(0,0,0,0);
+
+  return (
+    <>
+      <SectionHeader title="Control de Términos" description="Plazos procesales activos en tus casos" />
+      {pendientes.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No hay términos pendientes.</p>
+      ) : (
+        <div className="grid gap-4">
+          {pendientes.map((t) => {
+            const vence = new Date(t.vence_at!);
+            const diasRestantes = Math.ceil((vence.getTime() - today.getTime()) / 86400000);
+            const total = t.termino_dias ?? 15;
+            const transcurridos = total - diasRestantes;
+            const pct = Math.max(0, Math.min(100, (transcurridos / total) * 100));
+            const urgente = diasRestantes <= 2;
+            const vencido = diasRestantes < 0;
+            const caso = casoMap[t.case_id];
+            return (
+              <div key={t.id} className="bg-card rounded-xl border border-border p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    {(urgente || vencido) && <AlertTriangle className="w-4 h-4 text-destructive" />}
+                    <div>
+                      <p className="font-display text-base font-semibold text-foreground">{t.tipo}</p>
+                      <p className="font-body text-xs text-muted-foreground">Caso {caso?.radicado ?? "—"} · {t.descripcion}</p>
+                    </div>
+                  </div>
+                  <span className={`font-body text-sm font-semibold ${urgente || vencido ? "text-destructive" : "text-foreground"}`}>
+                    {vencido ? `Vencido hace ${Math.abs(diasRestantes)} d` : `${diasRestantes} días restantes`}
+                  </span>
+                </div>
+                <div className="w-full h-2 rounded-full bg-muted">
+                  <div className={`h-2 rounded-full transition-all ${urgente || vencido ? "bg-destructive" : "bg-accent"}`} style={{ width: `${pct}%` }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </>
+  );
+};
+
+/* ── Analítica ── */
+const SeccionAnalitica = ({ casos, actuaciones, audiencias }: { casos: Caso[]; actuaciones: Actuacion[]; audiencias: Audiencia[] }) => {
+  const activos = casos.filter(c => c.etapa !== "Cerrado").length;
+  const cerrados = casos.filter(c => c.etapa === "Cerrado").length;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const proximasAudiencias = audiencias.filter(a => new Date(a.fecha_inicio) >= today).length;
+  const terminosPendientes = actuaciones.filter(a => a.vence_at && !a.cumplida).length;
+
+  const kpis = [
+    { label: "Casos Activos", value: String(activos) },
+    { label: "Casos Cerrados", value: String(cerrados) },
+    { label: "Audiencias Próximas", value: String(proximasAudiencias) },
+    { label: "Términos Pendientes", value: String(terminosPendientes) },
   ];
 
   return (
     <>
-      <SectionHeader title="Notificaciones" description="Alertas de casos, términos y documentos pendientes" />
-      <div className="grid gap-3">
-        {notifs.map((n, i) => (
-          <div key={i} className="bg-card rounded-xl border border-border p-4 flex items-center gap-4">
-            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${n.tipo === "alerta" ? "bg-destructive" : "bg-accent"}`} />
-            <div className="flex-1">
-              <p className="font-body text-sm text-foreground">{n.msg}</p>
-              <p className="font-body text-[10px] text-muted-foreground mt-1">{n.tiempo}</p>
-            </div>
+      <SectionHeader title="Analítica y KPIs" description="Indicadores en tiempo real de tu carga laboral" />
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        {kpis.map((kpi) => (
+          <div key={kpi.label} className="bg-card rounded-xl border border-border p-5">
+            <p className="font-body text-xs text-muted-foreground uppercase tracking-wider">{kpi.label}</p>
+            <p className="font-display text-2xl font-bold text-foreground mt-2">{kpi.value}</p>
+            <div className="flex items-center gap-1 mt-2"><TrendingUp className="w-3 h-3 text-accent" /></div>
           </div>
         ))}
       </div>
@@ -342,32 +560,87 @@ const SeccionNotificaciones = () => {
   );
 };
 
-const SeccionClientes = () => {
-  const clientes = [
-    { nombre: "María Fernández", cedula: "1.023.456.789", casosActivos: 1 },
-    { nombre: "Carlos Ruiz", cedula: "1.098.765.432", casosActivos: 2 },
-    { nombre: "Ana Gómez", cedula: "1.045.678.901", casosActivos: 1 },
-  ];
+/* ── Notificaciones ── */
+const SeccionNotificaciones = ({ casos, actuaciones, audiencias }: { casos: Caso[]; actuaciones: Actuacion[]; audiencias: Audiencia[] }) => {
+  const casoMap = useMemo(() => Object.fromEntries(casos.map(c => [c.id, c.radicado])), [casos]);
+  const today = new Date(); today.setHours(0,0,0,0);
+
+  const notifs: { msg: string; tipo: string; tiempo: string }[] = [];
+
+  audiencias.filter(a => {
+    const d = new Date(a.fecha_inicio); const diff = (d.getTime() - today.getTime()) / 86400000;
+    return diff >= 0 && diff <= 7;
+  }).forEach(a => notifs.push({
+    msg: `Audiencia "${a.titulo}" del caso ${casoMap[a.case_id]} programada`,
+    tipo: "audiencia",
+    tiempo: new Date(a.fecha_inicio).toLocaleString("es-CO", { dateStyle: "medium", timeStyle: "short" }),
+  }));
+
+  actuaciones.filter(a => {
+    if (!a.vence_at || a.cumplida) return false;
+    const d = new Date(a.vence_at); const diff = (d.getTime() - today.getTime()) / 86400000;
+    return diff <= 3;
+  }).forEach(a => notifs.push({
+    msg: `Término "${a.tipo}" del caso ${casoMap[a.case_id]} próximo a vencer`,
+    tipo: "alerta",
+    tiempo: `Vence ${new Date(a.vence_at!).toLocaleDateString("es-CO")}`,
+  }));
+
+  casos.filter(c => c.urgente).forEach(c => notifs.push({
+    msg: `Caso urgente: ${c.radicado} (${c.cliente_nombre})`,
+    tipo: "alerta",
+    tiempo: "Marcado urgente por el jefe",
+  }));
 
   return (
     <>
-      <SectionHeader title="Clientes" description="Directorio de clientes y sus casos asociados" />
-      <div className="grid gap-4">
-        {clientes.map((c) => (
-          <div key={c.cedula} className="bg-card rounded-xl border border-border p-5 flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center">
-                <Users className="w-4 h-4 text-accent" />
-              </div>
-              <div>
-                <p className="font-display text-base font-semibold text-foreground">{c.nombre}</p>
-                <p className="font-body text-xs text-muted-foreground">CC {c.cedula}</p>
+      <SectionHeader title="Notificaciones" description="Alertas automáticas de tus casos" />
+      {notifs.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No hay notificaciones pendientes.</p>
+      ) : (
+        <div className="grid gap-3">
+          {notifs.map((n, i) => (
+            <div key={i} className="bg-card rounded-xl border border-border p-4 flex items-center gap-4">
+              <div className={`w-2 h-2 rounded-full flex-shrink-0 ${n.tipo === "alerta" ? "bg-destructive" : "bg-accent"}`} />
+              <div className="flex-1">
+                <p className="font-body text-sm text-foreground">{n.msg}</p>
+                <p className="font-body text-[10px] text-muted-foreground mt-1">{n.tiempo}</p>
               </div>
             </div>
-            <span className="font-body text-xs px-3 py-1 rounded-full bg-accent/10 text-accent">{c.casosActivos} caso(s)</span>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+};
+
+/* ── Clientes ── */
+const SeccionClientes = ({ casos }: { casos: Caso[] }) => {
+  const map = new Map<string, { nombre: string; casos: number }>();
+  casos.forEach(c => {
+    const cur = map.get(c.cliente_nombre) ?? { nombre: c.cliente_nombre, casos: 0 };
+    cur.casos += 1; map.set(c.cliente_nombre, cur);
+  });
+  const clientes = Array.from(map.values());
+
+  return (
+    <>
+      <SectionHeader title="Clientes" description="Clientes asociados a tus casos" />
+      {clientes.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Aún no tienes clientes asignados.</p>
+      ) : (
+        <div className="grid gap-4">
+          {clientes.map((c) => (
+            <div key={c.nombre} className="bg-card rounded-xl border border-border p-5 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center"><Users className="w-4 h-4 text-accent" /></div>
+                <p className="font-display text-base font-semibold text-foreground">{c.nombre}</p>
+              </div>
+              <span className="font-body text-xs px-3 py-1 rounded-full bg-accent/10 text-accent">{c.casos} caso(s)</span>
+            </div>
+          ))}
+        </div>
+      )}
     </>
   );
 };
