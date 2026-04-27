@@ -737,8 +737,15 @@ const SeccionAbogados = () => {
             </div>
             {createRole === "abogado" && (
               <div className="space-y-1.5">
-                <Label>Especialidad</Label>
-                <Input value={form.especialidad} onChange={(e) => setForm({ ...form, especialidad: e.target.value })} placeholder="Ej. Penal, Administrativo" />
+                <Label>Área de derecho *</Label>
+                <Select value={form.area_id} onValueChange={(v) => setForm({ ...form, area_id: v })}>
+                  <SelectTrigger><SelectValue placeholder="Selecciona un área" /></SelectTrigger>
+                  <SelectContent>
+                    {areas.map((a) => (
+                      <SelectItem key={a.id} value={a.id}>{a.nombre}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             )}
             <div className="space-y-1.5">
@@ -776,9 +783,19 @@ const SeccionAbogados = () => {
                     <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center">
                       <Users className="w-4 h-4 text-accent" />
                     </div>
-                    <div>
+                    <div className="flex-1 min-w-0">
                       <p className="font-display text-sm font-semibold text-foreground">{ab.full_name}</p>
-                      <p className="font-body text-xs text-muted-foreground">{ab.especialidad ?? "Sin especialidad"} · {ab.email}</p>
+                      <p className="font-body text-xs text-muted-foreground">{ab.especialidad ?? "Sin área"} · {ab.email}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-body text-[11px] text-muted-foreground">
+                        {ab.last_sign_in_at
+                          ? `Último acceso: ${new Date(ab.last_sign_in_at).toLocaleString("es-CO", { dateStyle: "medium", timeStyle: "short" })}`
+                          : "Aún no ha iniciado sesión"}
+                      </p>
+                      <p className="font-body text-[10px] text-muted-foreground/70">
+                        Inicios: {ab.sign_in_count ?? 0}
+                      </p>
                     </div>
                   </div>
                 ))}
