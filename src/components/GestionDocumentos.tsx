@@ -330,7 +330,7 @@ export function GestionDocumentos({ mode }: { mode: "jefe" | "abogado" }) {
                 Arrastra un archivo aquí
               </p>
               <p className="font-body text-xs text-muted-foreground mt-1">
-                o haz clic para seleccionar (PDF, DOCX, JPG · máx 25 MB)
+                o haz clic para seleccionar (PDF, DOCX, JPG · máx 250 MB)
               </p>
             </>
           )}
@@ -342,6 +342,16 @@ export function GestionDocumentos({ mode }: { mode: "jefe" | "abogado" }) {
             className="hidden"
           />
         </div>
+
+        {uploading && (
+          <div className="space-y-1.5">
+            <div className="flex justify-between text-xs font-body text-muted-foreground">
+              <span>Subiendo {file?.name}…</span>
+              <span>{progress}%</span>
+            </div>
+            <Progress value={progress} className="h-2" />
+          </div>
+        )}
 
         <div className="grid sm:grid-cols-2 gap-4">
           {mode === "jefe" && (
