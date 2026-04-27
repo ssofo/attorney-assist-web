@@ -337,7 +337,6 @@ const SeccionAsignacion = () => {
       area_id: form.area_id || null,
       tipo_proceso_id: form.tipo_proceso_id || null,
       cliente_nombre: form.cliente_nombre,
-      juzgado: form.juzgado || null,
       juzgado_id: form.juzgado_id || null,
       abogado_id: form.abogado_id || null,
       observaciones: form.observaciones || null,
@@ -601,8 +600,8 @@ interface AbogadoRow {
   id: string;
   full_name: string;
   email: string;
-  especialidad: string | null;
   area_id: string | null;
+  area_nombre?: string | null;
   phone: string | null;
   last_sign_in_at: string | null;
   sign_in_count: number | null;
@@ -632,9 +631,12 @@ const SeccionAbogados = () => {
     if (ids.length === 0) { setAbogados([]); setClientes([]); setLoading(false); return; }
     const { data } = await supabase
       .from("profiles")
-      .select("id, full_name, email, especialidad, area_id, phone, last_sign_in_at, sign_in_count")
+      .select("id, full_name, email, area_id, phone, last_sign_in_at, sign_in_count")
       .in("id", ids);
-    const profMap = new Map((data ?? []).map((p) => [p.id, p]));
+    const areaMap = new Map((aData ?? []).map((a) => [a.id, a.nombre]));
+    const profMap = new Map(
+      (data ?? []).map((p) => [p.id, { ...p, area_nombre: p.area_id ? areaMap.get(p.area_id) ?? null : null }]),
+    );
     const abos: AbogadoRow[] = [];
     const clis: AbogadoRow[] = [];
     for (const r of roleRows ?? []) {
