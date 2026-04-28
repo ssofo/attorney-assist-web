@@ -990,74 +990,184 @@ const SeccionCalendarioJefe = () => {
   );
 };
 
-/* ── Analítica ── */
-const SeccionAnaliticaJefe = () => (
-  <>
-    <SectionHeader title="Analítica y KPIs" description="Indicadores de rendimiento del bufete completo" />
-    <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-      {[
-        { label: "Casos Activos", value: "124", trend: "+12%" },
-        { label: "Tiempo Prom. Resolución", value: "45 días", trend: "-8%" },
-        { label: "Tasa de Éxito", value: "94%", trend: "+2%" },
-        { label: "Abogados Activos", value: "12", trend: "+1" },
-      ].map((kpi) => (
-        <div key={kpi.label} className="bg-card rounded-xl border border-border p-5">
-          <p className="font-body text-xs text-muted-foreground uppercase tracking-wider">{kpi.label}</p>
-          <p className="font-display text-2xl font-bold text-foreground mt-2">{kpi.value}</p>
-          <div className="flex items-center gap-1 mt-2">
-            <TrendingUp className="w-3 h-3 text-accent" />
-            <span className="font-body text-xs text-accent">{kpi.trend}</span>
-          </div>
-        </div>
-      ))}
-    </div>
-    <div className="grid sm:grid-cols-2 gap-4">
-      {[
-        { label: "Casos por Especialidad", items: ["Civil: 42", "Laboral: 35", "Penal: 28", "Familiar: 19"] },
-        { label: "Carga por Abogado", items: ["Dr. López: 8 casos", "Dra. Torres: 5 casos", "Dr. Ramírez: 3 casos"] },
-      ].map((card) => (
-        <div key={card.label} className="bg-card rounded-xl border border-border p-5">
-          <p className="font-display text-base font-semibold text-foreground mb-3">{card.label}</p>
-          <div className="space-y-2">
-            {card.items.map((item) => (
-              <div key={item} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
-                <span className="font-body text-xs text-foreground">{item.split(":")[0]}</span>
-                <span className="font-body text-xs font-medium text-accent">{item.split(":")[1]}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  </>
-);
+/* ── Analítica (dashboard real con gráficos) ── */
+const CHART_COLORS = ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#ec4899", "#84cc16"];
 
-/* ── Notificaciones ── */
-const SeccionNotificacionesJefe = () => {
-  const notifs = [
-    { msg: "Dr. López envió caso #2024-0912 para revisión", tipo: "caso", tiempo: "Hace 30 min" },
-    { msg: "Término próximo a vencer - Caso #2024-0950 (Dra. Torres)", tipo: "alerta", tiempo: "Hace 1 hora" },
-    { msg: "Dra. Torres solicita reasignación del caso #2024-0935", tipo: "solicitud", tiempo: "Hace 2 horas" },
-    { msg: "Nuevo documento cargado en caso #2024-0847", tipo: "documento", tiempo: "Hace 4 horas" },
+const SeccionAnaliticaJefe = () => {
+  const [casos, setCasos] = useState<{ id: string; etapa: string; tipo: string; abogado_id: string | null; created_at: string; urgente: boolean; area_id: string | null }[]>([]);
+  const [profs, setProfs] = useState<Record<string, string>>({});
+  const [areas, setAreas] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      const [{ data: cs }, { data: ps }, { data: ars }] = await Promise.all([
+        supabase.from("cases").select("id, etapa, tipo, abogado_id, created_at, urgente, area_id"),
+        supabase.from("profiles").select("id, full_name"),
+        supabase.from("areas_derecho").select("id, nombre"),
+      ]);
+      setCasos((cs ?? []) as any);
+      const pm: Record<string, string> = {}; (ps ?? []).forEach((p: any) => { pm[p.id] = p.full_name; }); setProfs(pm);
+      const am: Record<string, string> = {}; (ars ?? []).forEach((a: any) => { am[a.id] = a.nombre; }); setAreas(am);
+      setLoading(false);
+    })();
+  }, []);
+
+  const total = casos.length;
+  const activos = casos.filter(c => c.etapa !== "Cerrado").length;
+  const cerrados = casos.filter(c => c.etapa === "Cerrado").length;
+  const urgentes = casos.filter(c => c.urgente).length;
+
+  const porEtapa = Object.entries(casos.reduce<Record<string, number>>((acc, c) => { acc[c.etapa] = (acc[c.etapa] ?? 0) + 1; return acc; }, {})).map(([name, value]) => ({ name, value }));
+  const porArea = Object.entries(casos.reduce<Record<string, number>>((acc, c) => { const k = areas[c.area_id ?? ""] ?? c.tipo ?? "Sin área"; acc[k] = (acc[k] ?? 0) + 1; return acc; }, {})).map(([name, value]) => ({ name, value }));
+  const porAbogado = Object.entries(casos.reduce<Record<string, number>>((acc, c) => { if (!c.abogado_id) return acc; const k = profs[c.abogado_id] ?? "—"; acc[k] = (acc[k] ?? 0) + 1; return acc; }, {})).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 8);
+
+  // Casos creados por mes (últimos 6 meses)
+  const meses: { name: string; value: number }[] = [];
+  const now = new Date();
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const label = d.toLocaleDateString("es-CO", { month: "short", year: "2-digit" });
+    const count = casos.filter(c => { const cd = new Date(c.created_at); return cd.getFullYear() === d.getFullYear() && cd.getMonth() === d.getMonth(); }).length;
+    meses.push({ name: label, value: count });
+  }
+
+  const kpis = [
+    { label: "Casos Totales", value: total, color: "from-indigo-500 to-violet-500", icon: Briefcase },
+    { label: "Casos Activos", value: activos, color: "from-emerald-500 to-teal-500", icon: TrendingUp },
+    { label: "Casos Cerrados", value: cerrados, color: "from-sky-500 to-cyan-500", icon: Check },
+    { label: "Urgentes", value: urgentes, color: "from-rose-500 to-orange-500", icon: AlertTriangle },
   ];
 
   return (
     <>
-      <SectionHeader title="Notificaciones" description="Alertas de casos, solicitudes de abogados y vencimientos" />
-      <div className="grid gap-3">
-        {notifs.map((n, i) => (
-          <div key={i} className="bg-card rounded-xl border border-border p-4 flex items-center gap-4">
-            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${n.tipo === "alerta" ? "bg-destructive" : n.tipo === "solicitud" ? "bg-yellow-500" : "bg-accent"}`} />
-            <div className="flex-1">
-              <p className="font-body text-sm text-foreground">{n.msg}</p>
-              <p className="font-body text-[10px] text-muted-foreground mt-1">{n.tiempo}</p>
-            </div>
+      <SectionHeader title="Analítica y KPIs" description="Indicadores en tiempo real del bufete" />
+      {loading ? <p className="font-body text-sm text-muted-foreground">Cargando…</p> : (
+        <>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            {kpis.map((k) => (
+              <div key={k.label} className={`rounded-xl p-5 text-white shadow-luxury bg-gradient-to-br ${k.color}`}>
+                <div className="flex items-center justify-between">
+                  <p className="font-body text-xs uppercase tracking-wider opacity-80">{k.label}</p>
+                  <k.icon className="w-4 h-4 opacity-80" />
+                </div>
+                <p className="font-display text-3xl font-bold mt-2">{k.value}</p>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+
+          <div className="grid lg:grid-cols-2 gap-4 mb-4">
+            <ChartCard title="Casos por Etapa">
+              <RPieChart data={porEtapa} />
+            </ChartCard>
+            <ChartCard title="Casos por Área de Derecho">
+              <RBarChart data={porArea} />
+            </ChartCard>
+          </div>
+          <div className="grid lg:grid-cols-2 gap-4">
+            <ChartCard title="Carga por Abogado">
+              <RBarChart data={porAbogado} horizontal />
+            </ChartCard>
+            <ChartCard title="Casos creados (últimos 6 meses)">
+              <RLineChart data={meses} />
+            </ChartCard>
+          </div>
+        </>
+      )}
     </>
   );
 };
+
+const ChartCard = ({ title, children }: { title: string; children: React.ReactNode }) => (
+  <div className="bg-card rounded-xl border border-border p-5">
+    <p className="font-display text-base font-semibold text-foreground mb-4">{title}</p>
+    <div className="h-64">{children}</div>
+  </div>
+);
+
+/* ── Notificaciones del jefe (REALES) ── */
+const SeccionNotificacionesJefe = ({ setActiveSection }: { setActiveSection: (s: string) => void }) => {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [notifs, setNotifs] = useState<{ id: string; case_id: string | null; tipo: string; titulo: string; mensaje: string; leida: boolean; created_at: string }[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = async () => {
+    if (!user) return;
+    setLoading(true);
+    const { data } = await supabase.from("notificaciones").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(100);
+    setNotifs((data ?? []) as any);
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, [user?.id]);
+
+  useEffect(() => {
+    if (!user) return;
+    const ch = supabase.channel("jefe-notif")
+      .on("postgres_changes", { event: "*", schema: "public", table: "notificaciones", filter: `user_id=eq.${user.id}` }, () => load())
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [user?.id]);
+
+  const onClick = async (n: typeof notifs[number]) => {
+    if (!n.leida) await supabase.from("notificaciones").update({ leida: true }).eq("id", n.id);
+    if (n.case_id || n.tipo.startsWith("caso") || n.tipo === "actuacion_creada" || n.tipo === "audiencia_creada") setActiveSection("revision");
+    else if (n.tipo === "documento_recibido") setActiveSection("documentos");
+    load();
+  };
+
+  const marcarTodas = async () => {
+    const ids = notifs.filter(n => !n.leida).map(n => n.id);
+    if (ids.length === 0) return;
+    await supabase.from("notificaciones").update({ leida: true }).in("id", ids);
+    toast({ title: "Todas marcadas como leídas" });
+    load();
+  };
+
+  const eliminar = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    await supabase.from("notificaciones").delete().eq("id", id);
+    load();
+  };
+
+  return (
+    <>
+      <div className="flex items-end justify-between mb-8 gap-3 flex-wrap">
+        <div>
+          <h1 className="font-display text-3xl font-bold text-foreground">Notificaciones</h1>
+          <p className="font-body text-sm text-muted-foreground mt-2">Alertas de casos, documentos y eventos del bufete en tiempo real</p>
+        </div>
+        {notifs.some(n => !n.leida) && (
+          <Button size="sm" variant="outline" onClick={marcarTodas}>Marcar todas como leídas</Button>
+        )}
+      </div>
+      {loading ? <p className="text-sm text-muted-foreground">Cargando…</p> : notifs.length === 0 ? (
+        <div className="bg-card rounded-xl border border-border p-8 text-center">
+          <Bell className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+          <p className="font-body text-sm text-muted-foreground">No tienes notificaciones.</p>
+        </div>
+      ) : (
+        <div className="grid gap-3">
+          {notifs.map((n) => (
+            <button key={n.id} onClick={() => onClick(n)} className={`text-left bg-card rounded-xl border p-4 flex items-center gap-4 hover:border-accent/30 transition-all ${n.leida ? "border-border opacity-70" : "border-accent/30"}`}>
+              <div className={`w-2 h-2 rounded-full flex-shrink-0 ${n.leida ? "bg-muted-foreground/30" : "bg-accent"}`} />
+              <div className="flex-1 min-w-0">
+                <p className="font-body text-sm font-semibold text-foreground">{n.titulo}</p>
+                <p className="font-body text-xs text-muted-foreground mt-0.5">{n.mensaje}</p>
+                <p className="font-body text-[10px] text-muted-foreground/70 mt-1">{new Date(n.created_at).toLocaleString("es-CO", { dateStyle: "medium", timeStyle: "short" })}</p>
+              </div>
+              <button onClick={(e) => eliminar(e, n.id)} className="p-1.5 rounded-md bg-muted text-muted-foreground hover:text-destructive" title="Eliminar">
+                <X className="w-4 h-4" />
+              </button>
+            </button>
+          ))}
+        </div>
+      )}
+    </>
+  );
+};
+
 
 /* ── Configuración ── */
 const SeccionConfiguracion = () => (
