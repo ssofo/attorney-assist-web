@@ -4,6 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 
 export type AppRole = "jefe" | "abogado" | "cliente";
 
+const ROLE_PRIORITY: AppRole[] = ["jefe", "abogado", "cliente"];
+
 interface AuthContextValue {
   session: Session | null;
   user: User | null;
@@ -51,9 +53,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const { data } = await supabase
       .from("user_roles")
       .select("role")
-      .eq("user_id", userId)
-      .maybeSingle();
-    setRole((data?.role as AppRole) ?? null);
+      .eq("user_id", userId);
+
+    const roles = (data ?? []).map((row) => row.role as AppRole);
+    setRole(ROLE_PRIORITY.find((candidate) => roles.includes(candidate)) ?? null);
   };
 
   const signOut = async () => {
