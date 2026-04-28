@@ -36,6 +36,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { GestionDocumentos } from "@/components/GestionDocumentos";
+import { RPieChart, RBarChart, RLineChart } from "@/components/AnalyticsCharts";
 import { Upload } from "lucide-react";
 
 const menuItems = [
@@ -48,7 +49,6 @@ const menuItems = [
   { id: "comentarios", icon: MessageSquare, label: "Comentarios Internos" },
   { id: "calendario", icon: CalendarDays, label: "Calendario General" },
   { id: "analitica", icon: BarChart3, label: "Analítica y KPIs" },
-  { id: "qlik", icon: TrendingUp, label: "Dashboard Qlik" },
   { id: "notificaciones", icon: Bell, label: "Notificaciones" },
   { id: "configuracion", icon: Settings, label: "Configuración" },
 ];
@@ -161,8 +161,7 @@ const DashboardJefe = () => {
           {activeSection === "comentarios" && <SeccionComentarios />}
           {activeSection === "calendario" && <SeccionCalendarioJefe />}
           {activeSection === "analitica" && <SeccionAnaliticaJefe />}
-          {activeSection === "qlik" && <SeccionQlik />}
-          {activeSection === "notificaciones" && <SeccionNotificacionesJefe />}
+          {activeSection === "notificaciones" && <SeccionNotificacionesJefe setActiveSection={setActiveSection} />}
           {activeSection === "configuracion" && <SeccionConfiguracion />}
         </div>
       </main>
@@ -178,92 +177,214 @@ const SectionHeader = ({ title, description }: { title: string; description: str
   </div>
 );
 
-const etapas = ["Creación", "Recaudo Probatorio", "Proyección", "Revisión", "Proyección de Recursos", "Recabar Pruebas", "Audiencia"];
+const etapas = ["Creación", "Proyección", "Recaudo Probatorio", "Revisión", "Firma", "Radicado", "Cerrado"];
 
-/* ── Revisión de Casos (accept / request corrections) ── */
+/* ── Revisión de Casos (real data) ── */
+type RevCaso = {
+  id: string; radicado: string; cliente_nombre: string; tipo: string;
+  etapa: string; abogado_id: string | null; observaciones: string | null;
+  area_id: string | null; created_at: string;
+};
+type RevAct = { id: string; case_id: string; tipo: string; descripcion: string; fecha: string; vence_at: string | null; cumplida: boolean };
+type RevAud = { id: string; case_id: string; titulo: string; fecha_inicio: string; modalidad: string | null; ubicacion: string | null; enlace_virtual: string | null };
+type RevDoc = { id: string; case_id: string | null; file_name: string; file_path: string; created_at: string; uploaded_by: string };
+
 const SeccionRevision = () => {
+  const { toast } = useToast();
+  const [casos, setCasos] = useState<RevCaso[]>([]);
+  const [acts, setActs] = useState<RevAct[]>([]);
+  const [auds, setAuds] = useState<RevAud[]>([]);
+  const [docs, setDocs] = useState<RevDoc[]>([]);
+  const [abogadosMap, setAbogadosMap] = useState<Record<string, string>>({});
   const [expandedCase, setExpandedCase] = useState<string | null>(null);
   const [observacion, setObservacion] = useState("");
+  const [loading, setLoading] = useState(true);
 
-  const pendientes = [
-    { id: "2024-0912", abogado: "Dr. López", cliente: "Carlos Ruiz", etapa: "Proyección", tipo: "Laboral", etapaIndex: 2 },
-    { id: "2024-0950", abogado: "Dra. Torres", cliente: "José Martínez", etapa: "Recaudo Probatorio", tipo: "Penal", etapaIndex: 1 },
-    { id: "2024-0847", abogado: "Dr. López", cliente: "María Fernández", etapa: "Revisión", tipo: "Civil", etapaIndex: 3 },
-  ];
+  const load = async () => {
+    setLoading(true);
+    const { data: cs } = await supabase.from("cases").select("id, radicado, cliente_nombre, tipo, etapa, abogado_id, observaciones, area_id, created_at").in("etapa", ["Proyección", "Revisión"] as any).order("created_at", { ascending: false });
+    const list = (cs ?? []) as any as RevCaso[];
+    setCasos(list);
+    const ids = list.map(c => c.id);
+    const abogadoIds = Array.from(new Set(list.map(c => c.abogado_id).filter(Boolean) as string[]));
+    if (abogadoIds.length > 0) {
+      const { data: profs } = await supabase.from("profiles").select("id, full_name").in("id", abogadoIds);
+      const m: Record<string, string> = {};
+      (profs ?? []).forEach((p: any) => { m[p.id] = p.full_name; });
+      setAbogadosMap(m);
+    }
+    if (ids.length > 0) {
+      const [{ data: a1 }, { data: a2 }, { data: d1 }] = await Promise.all([
+        supabase.from("actuaciones").select("id, case_id, tipo, descripcion, fecha, vence_at, cumplida").in("case_id", ids).order("fecha", { ascending: false }),
+        supabase.from("audiencias").select("id, case_id, titulo, fecha_inicio, modalidad, ubicacion, enlace_virtual").in("case_id", ids).order("fecha_inicio", { ascending: true }),
+        supabase.from("documents").select("id, case_id, file_name, file_path, created_at, uploaded_by").in("case_id", ids).order("created_at", { ascending: false }),
+      ]);
+      setActs((a1 ?? []) as any); setAuds((a2 ?? []) as any); setDocs((d1 ?? []) as any);
+    } else { setActs([]); setAuds([]); setDocs([]); }
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const aprobar = async (caso: RevCaso) => {
+    const idx = etapas.indexOf(caso.etapa);
+    const next = etapas[Math.min(idx + 1, etapas.length - 1)];
+    const { error } = await supabase.from("cases").update({ etapa: next as any }).eq("id", caso.id);
+    if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
+    toast({ title: "Caso aprobado", description: `Avanzó a ${next}` });
+    setExpandedCase(null);
+    load();
+  };
+
+  const devolver = async (caso: RevCaso) => {
+    if (!observacion.trim()) { toast({ title: "Falta observación", description: "Escribe qué debe corregirse", variant: "destructive" }); return; }
+    const obs = `[${new Date().toLocaleString("es-CO")}] Devuelto por el director: ${observacion.trim()}\n\n${caso.observaciones ?? ""}`.trim();
+    const { error } = await supabase.from("cases").update({ etapa: "Proyección" as any, observaciones: obs }).eq("id", caso.id);
+    if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
+    toast({ title: "Caso devuelto", description: "El abogado verá las correcciones." });
+    setObservacion(""); setExpandedCase(null);
+    load();
+  };
+
+  const descargarDoc = async (d: RevDoc) => {
+    const { data, error } = await supabase.storage.from("case-documents").createSignedUrl(d.file_path, 60);
+    if (error || !data?.signedUrl) { toast({ title: "Error", description: "No se pudo descargar", variant: "destructive" }); return; }
+    window.open(data.signedUrl, "_blank");
+  };
 
   return (
     <>
-      <SectionHeader title="Revisión de Casos" description="Revisa, aprueba o devuelve los casos enviados por los abogados" />
-      <div className="grid gap-4">
-        {pendientes.map((caso) => (
-          <div key={caso.id} className="bg-card rounded-xl border border-border overflow-hidden">
-            <button
-              onClick={() => setExpandedCase(expandedCase === caso.id ? null : caso.id)}
-              className="w-full p-5 flex items-center justify-between hover:bg-muted/30 transition-colors"
-            >
-              <div className="flex items-center gap-4">
-                <div className="w-10 h-10 rounded-lg gradient-navy flex items-center justify-center">
-                  <FileText className="w-4 h-4 text-accent" />
-                </div>
-                <div className="text-left">
-                  <p className="font-display text-base font-semibold text-foreground">Caso #{caso.id}</p>
-                  <p className="font-body text-xs text-muted-foreground">{caso.abogado} · {caso.cliente} · {caso.tipo}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-body px-3 py-1 rounded-full bg-accent/10 text-accent font-medium">{caso.etapa}</span>
-                <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform ${expandedCase === caso.id ? "rotate-90" : ""}`} />
-              </div>
-            </button>
-
-            {expandedCase === caso.id && (
-              <div className="px-5 pb-5 border-t border-border pt-4 space-y-4">
-                {/* Workflow steps */}
-                <div>
-                  <p className="font-body text-xs text-muted-foreground mb-3 uppercase tracking-wider">Progreso del caso</p>
-                  <div className="flex items-center gap-1 flex-wrap">
-                    {etapas.map((et, i) => (
-                      <div key={et} className="flex items-center gap-1">
-                        <div className={`px-2.5 py-1 rounded-md text-[10px] font-body font-medium ${
-                          i < caso.etapaIndex ? "bg-accent/20 text-accent" :
-                          i === caso.etapaIndex ? "bg-accent text-primary-foreground" :
-                          "bg-muted text-muted-foreground"
-                        }`}>
-                          {et}
-                        </div>
-                        {i < etapas.length - 1 && <ChevronRight className="w-3 h-3 text-muted-foreground" />}
-                      </div>
-                    ))}
+      <SectionHeader title="Revisión de Casos" description="Casos enviados por los abogados a Proyección o Revisión. Mira lo que llevan y aprueba o devuelve." />
+      {loading ? <p className="font-body text-sm text-muted-foreground">Cargando…</p> : casos.length === 0 ? (
+        <div className="bg-card rounded-xl border border-border p-8 text-center">
+          <FileText className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+          <p className="font-body text-sm text-muted-foreground">No hay casos pendientes de revisión.</p>
+        </div>
+      ) : (
+        <div className="grid gap-4">
+          {casos.map((caso) => {
+            const idx = etapas.indexOf(caso.etapa);
+            const cActs = acts.filter(a => a.case_id === caso.id);
+            const cAuds = auds.filter(a => a.case_id === caso.id);
+            const cDocs = docs.filter(a => a.case_id === caso.id);
+            return (
+            <div key={caso.id} className="bg-card rounded-xl border border-border overflow-hidden">
+              <button
+                onClick={() => setExpandedCase(expandedCase === caso.id ? null : caso.id)}
+                className="w-full p-5 flex items-center justify-between hover:bg-muted/30 transition-colors"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-lg gradient-navy flex items-center justify-center">
+                    <FileText className="w-4 h-4 text-accent" />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-display text-base font-semibold text-foreground">Caso #{caso.radicado}</p>
+                    <p className="font-body text-xs text-muted-foreground">{abogadosMap[caso.abogado_id ?? ""] ?? "Sin abogado"} · {caso.cliente_nombre} · {caso.tipo}</p>
                   </div>
                 </div>
-
-                {/* Observations */}
-                <div>
-                  <Label className="font-body text-sm text-foreground">Observaciones</Label>
-                  <Textarea
-                    placeholder="Escribe observaciones o correcciones para el abogado..."
-                    value={observacion}
-                    onChange={(e) => setObservacion(e.target.value)}
-                    className="mt-2"
-                  />
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-body px-3 py-1 rounded-full bg-accent/10 text-accent font-medium">{caso.etapa}</span>
+                  <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform ${expandedCase === caso.id ? "rotate-90" : ""}`} />
                 </div>
+              </button>
 
-                {/* Actions */}
-                <div className="flex gap-3">
-                  <Button className="gradient-gold text-primary font-body font-semibold shadow-gold hover:opacity-90 border-0 gap-2">
-                    <Check className="w-4 h-4" />
-                    Aprobar Caso
-                  </Button>
-                  <Button variant="outline" className="font-body gap-2 border-destructive/30 text-destructive hover:bg-destructive/10">
-                    <XCircle className="w-4 h-4" />
-                    Devolver con Correcciones
-                  </Button>
+              {expandedCase === caso.id && (
+                <div className="px-5 pb-5 border-t border-border pt-4 space-y-4">
+                  <div>
+                    <p className="font-body text-xs text-muted-foreground mb-3 uppercase tracking-wider">Progreso del caso</p>
+                    <div className="flex items-center gap-1 flex-wrap">
+                      {etapas.map((et, i) => (
+                        <div key={et} className="flex items-center gap-1">
+                          <div className={`px-2.5 py-1 rounded-md text-[10px] font-body font-medium ${
+                            i < idx ? "bg-accent/20 text-accent" :
+                            i === idx ? "bg-accent text-primary-foreground" :
+                            "bg-muted text-muted-foreground"
+                          }`}>{et}</div>
+                          {i < etapas.length - 1 && <ChevronRight className="w-3 h-3 text-muted-foreground" />}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {caso.observaciones && (
+                    <div className="bg-muted/30 rounded-lg p-3">
+                      <p className="font-body text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Observaciones del caso</p>
+                      <p className="font-body text-xs text-foreground whitespace-pre-line">{caso.observaciones}</p>
+                    </div>
+                  )}
+
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div className="border border-border rounded-lg p-3">
+                      <p className="font-display text-sm font-semibold text-foreground mb-2">Actuaciones del abogado ({cActs.length})</p>
+                      {cActs.length === 0 ? <p className="text-xs text-muted-foreground">Sin actuaciones registradas.</p> : (
+                        <ul className="space-y-2 max-h-56 overflow-auto">
+                          {cActs.map(a => (
+                            <li key={a.id} className="text-xs">
+                              <p className="font-medium text-foreground">{a.tipo} {a.cumplida && <span className="text-accent">✓</span>}</p>
+                              <p className="text-muted-foreground">{a.descripcion}</p>
+                              <p className="text-[10px] text-muted-foreground/70">{new Date(a.fecha).toLocaleDateString("es-CO")}{a.vence_at ? ` · vence ${new Date(a.vence_at).toLocaleDateString("es-CO")}` : ""}</p>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                    <div className="border border-border rounded-lg p-3">
+                      <p className="font-display text-sm font-semibold text-foreground mb-2">Audiencias ({cAuds.length})</p>
+                      {cAuds.length === 0 ? <p className="text-xs text-muted-foreground">Sin audiencias.</p> : (
+                        <ul className="space-y-2 max-h-56 overflow-auto">
+                          {cAuds.map(a => (
+                            <li key={a.id} className="text-xs">
+                              <p className="font-medium text-foreground">{a.titulo}</p>
+                              <p className="text-muted-foreground">{new Date(a.fecha_inicio).toLocaleString("es-CO", { dateStyle: "medium", timeStyle: "short" })} · {a.modalidad}</p>
+                              {a.enlace_virtual && <a href={a.enlace_virtual} target="_blank" rel="noopener" className="text-accent underline text-[10px]">Abrir enlace</a>}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="border border-border rounded-lg p-3">
+                    <p className="font-display text-sm font-semibold text-foreground mb-2">Documentos ({cDocs.length})</p>
+                    {cDocs.length === 0 ? <p className="text-xs text-muted-foreground">Sin documentos.</p> : (
+                      <ul className="grid gap-2 max-h-56 overflow-auto">
+                        {cDocs.map(d => (
+                          <li key={d.id} className="flex items-center justify-between text-xs">
+                            <span className="truncate">{d.file_name}</span>
+                            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => descargarDoc(d)}>Descargar</Button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+
+                  <div>
+                    <Label className="font-body text-sm text-foreground">Observaciones para el abogado</Label>
+                    <Textarea
+                      placeholder="Escribe correcciones o instrucciones para devolver el caso..."
+                      value={observacion}
+                      onChange={(e) => setObservacion(e.target.value)}
+                      className="mt-2"
+                    />
+                  </div>
+
+                  <div className="flex gap-3 flex-wrap">
+                    <Button onClick={() => aprobar(caso)} className="gradient-gold text-primary font-body font-semibold shadow-gold hover:opacity-90 border-0 gap-2">
+                      <Check className="w-4 h-4" />
+                      Aprobar y avanzar etapa
+                    </Button>
+                    <Button onClick={() => devolver(caso)} variant="outline" className="font-body gap-2 border-destructive/30 text-destructive hover:bg-destructive/10">
+                      <XCircle className="w-4 h-4" />
+                      Devolver con Correcciones
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
+              )}
+            </div>
+            );
+          })}
+        </div>
+      )}
     </>
   );
 };
@@ -870,74 +991,182 @@ const SeccionCalendarioJefe = () => {
   );
 };
 
-/* ── Analítica ── */
-const SeccionAnaliticaJefe = () => (
-  <>
-    <SectionHeader title="Analítica y KPIs" description="Indicadores de rendimiento del bufete completo" />
-    <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-      {[
-        { label: "Casos Activos", value: "124", trend: "+12%" },
-        { label: "Tiempo Prom. Resolución", value: "45 días", trend: "-8%" },
-        { label: "Tasa de Éxito", value: "94%", trend: "+2%" },
-        { label: "Abogados Activos", value: "12", trend: "+1" },
-      ].map((kpi) => (
-        <div key={kpi.label} className="bg-card rounded-xl border border-border p-5">
-          <p className="font-body text-xs text-muted-foreground uppercase tracking-wider">{kpi.label}</p>
-          <p className="font-display text-2xl font-bold text-foreground mt-2">{kpi.value}</p>
-          <div className="flex items-center gap-1 mt-2">
-            <TrendingUp className="w-3 h-3 text-accent" />
-            <span className="font-body text-xs text-accent">{kpi.trend}</span>
-          </div>
-        </div>
-      ))}
-    </div>
-    <div className="grid sm:grid-cols-2 gap-4">
-      {[
-        { label: "Casos por Especialidad", items: ["Civil: 42", "Laboral: 35", "Penal: 28", "Familiar: 19"] },
-        { label: "Carga por Abogado", items: ["Dr. López: 8 casos", "Dra. Torres: 5 casos", "Dr. Ramírez: 3 casos"] },
-      ].map((card) => (
-        <div key={card.label} className="bg-card rounded-xl border border-border p-5">
-          <p className="font-display text-base font-semibold text-foreground mb-3">{card.label}</p>
-          <div className="space-y-2">
-            {card.items.map((item) => (
-              <div key={item} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
-                <span className="font-body text-xs text-foreground">{item.split(":")[0]}</span>
-                <span className="font-body text-xs font-medium text-accent">{item.split(":")[1]}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  </>
-);
+/* ── Analítica (dashboard real con gráficos) ── */
+const SeccionAnaliticaJefe = () => {
+  const [casos, setCasos] = useState<{ id: string; etapa: string; tipo: string; abogado_id: string | null; created_at: string; urgente: boolean; area_id: string | null }[]>([]);
+  const [profs, setProfs] = useState<Record<string, string>>({});
+  const [areas, setAreas] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
 
-/* ── Notificaciones ── */
-const SeccionNotificacionesJefe = () => {
-  const notifs = [
-    { msg: "Dr. López envió caso #2024-0912 para revisión", tipo: "caso", tiempo: "Hace 30 min" },
-    { msg: "Término próximo a vencer - Caso #2024-0950 (Dra. Torres)", tipo: "alerta", tiempo: "Hace 1 hora" },
-    { msg: "Dra. Torres solicita reasignación del caso #2024-0935", tipo: "solicitud", tiempo: "Hace 2 horas" },
-    { msg: "Nuevo documento cargado en caso #2024-0847", tipo: "documento", tiempo: "Hace 4 horas" },
+  useEffect(() => {
+    (async () => {
+      const [{ data: cs }, { data: ps }, { data: ars }] = await Promise.all([
+        supabase.from("cases").select("id, etapa, tipo, abogado_id, created_at, urgente, area_id"),
+        supabase.from("profiles").select("id, full_name"),
+        supabase.from("areas_derecho").select("id, nombre"),
+      ]);
+      setCasos((cs ?? []) as any);
+      const pm: Record<string, string> = {}; (ps ?? []).forEach((p: any) => { pm[p.id] = p.full_name; }); setProfs(pm);
+      const am: Record<string, string> = {}; (ars ?? []).forEach((a: any) => { am[a.id] = a.nombre; }); setAreas(am);
+      setLoading(false);
+    })();
+  }, []);
+
+  const total = casos.length;
+  const activos = casos.filter(c => c.etapa !== "Cerrado").length;
+  const cerrados = casos.filter(c => c.etapa === "Cerrado").length;
+  const urgentes = casos.filter(c => c.urgente).length;
+
+  const porEtapa = Object.entries(casos.reduce<Record<string, number>>((acc, c) => { acc[c.etapa] = (acc[c.etapa] ?? 0) + 1; return acc; }, {})).map(([name, value]) => ({ name, value }));
+  const porArea = Object.entries(casos.reduce<Record<string, number>>((acc, c) => { const k = areas[c.area_id ?? ""] ?? c.tipo ?? "Sin área"; acc[k] = (acc[k] ?? 0) + 1; return acc; }, {})).map(([name, value]) => ({ name, value }));
+  const porAbogado = Object.entries(casos.reduce<Record<string, number>>((acc, c) => { if (!c.abogado_id) return acc; const k = profs[c.abogado_id] ?? "—"; acc[k] = (acc[k] ?? 0) + 1; return acc; }, {})).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 8);
+
+  // Casos creados por mes (últimos 6 meses)
+  const meses: { name: string; value: number }[] = [];
+  const now = new Date();
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const label = d.toLocaleDateString("es-CO", { month: "short", year: "2-digit" });
+    const count = casos.filter(c => { const cd = new Date(c.created_at); return cd.getFullYear() === d.getFullYear() && cd.getMonth() === d.getMonth(); }).length;
+    meses.push({ name: label, value: count });
+  }
+
+  const kpis = [
+    { label: "Casos Totales", value: total, color: "from-indigo-500 to-violet-500", icon: Briefcase },
+    { label: "Casos Activos", value: activos, color: "from-emerald-500 to-teal-500", icon: TrendingUp },
+    { label: "Casos Cerrados", value: cerrados, color: "from-sky-500 to-cyan-500", icon: Check },
+    { label: "Urgentes", value: urgentes, color: "from-rose-500 to-orange-500", icon: AlertTriangle },
   ];
 
   return (
     <>
-      <SectionHeader title="Notificaciones" description="Alertas de casos, solicitudes de abogados y vencimientos" />
-      <div className="grid gap-3">
-        {notifs.map((n, i) => (
-          <div key={i} className="bg-card rounded-xl border border-border p-4 flex items-center gap-4">
-            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${n.tipo === "alerta" ? "bg-destructive" : n.tipo === "solicitud" ? "bg-yellow-500" : "bg-accent"}`} />
-            <div className="flex-1">
-              <p className="font-body text-sm text-foreground">{n.msg}</p>
-              <p className="font-body text-[10px] text-muted-foreground mt-1">{n.tiempo}</p>
-            </div>
+      <SectionHeader title="Analítica y KPIs" description="Indicadores en tiempo real del bufete" />
+      {loading ? <p className="font-body text-sm text-muted-foreground">Cargando…</p> : (
+        <>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            {kpis.map((k) => (
+              <div key={k.label} className={`rounded-xl p-5 text-white shadow-luxury bg-gradient-to-br ${k.color}`}>
+                <div className="flex items-center justify-between">
+                  <p className="font-body text-xs uppercase tracking-wider opacity-80">{k.label}</p>
+                  <k.icon className="w-4 h-4 opacity-80" />
+                </div>
+                <p className="font-display text-3xl font-bold mt-2">{k.value}</p>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+
+          <div className="grid lg:grid-cols-2 gap-4 mb-4">
+            <ChartCard title="Casos por Etapa">
+              <RPieChart data={porEtapa} />
+            </ChartCard>
+            <ChartCard title="Casos por Área de Derecho">
+              <RBarChart data={porArea} />
+            </ChartCard>
+          </div>
+          <div className="grid lg:grid-cols-2 gap-4">
+            <ChartCard title="Carga por Abogado">
+              <RBarChart data={porAbogado} horizontal />
+            </ChartCard>
+            <ChartCard title="Casos creados (últimos 6 meses)">
+              <RLineChart data={meses} />
+            </ChartCard>
+          </div>
+        </>
+      )}
     </>
   );
 };
+
+const ChartCard = ({ title, children }: { title: string; children: React.ReactNode }) => (
+  <div className="bg-card rounded-xl border border-border p-5">
+    <p className="font-display text-base font-semibold text-foreground mb-4">{title}</p>
+    <div className="h-64">{children}</div>
+  </div>
+);
+
+/* ── Notificaciones del jefe (REALES) ── */
+const SeccionNotificacionesJefe = ({ setActiveSection }: { setActiveSection: (s: string) => void }) => {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [notifs, setNotifs] = useState<{ id: string; case_id: string | null; tipo: string; titulo: string; mensaje: string; leida: boolean; created_at: string }[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = async () => {
+    if (!user) return;
+    setLoading(true);
+    const { data } = await supabase.from("notificaciones").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(100);
+    setNotifs((data ?? []) as any);
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, [user?.id]);
+
+  useEffect(() => {
+    if (!user) return;
+    const ch = supabase.channel("jefe-notif")
+      .on("postgres_changes", { event: "*", schema: "public", table: "notificaciones", filter: `user_id=eq.${user.id}` }, () => load())
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [user?.id]);
+
+  const onClick = async (n: typeof notifs[number]) => {
+    if (!n.leida) await supabase.from("notificaciones").update({ leida: true }).eq("id", n.id);
+    if (n.case_id || n.tipo.startsWith("caso") || n.tipo === "actuacion_creada" || n.tipo === "audiencia_creada") setActiveSection("revision");
+    else if (n.tipo === "documento_recibido") setActiveSection("documentos");
+    load();
+  };
+
+  const marcarTodas = async () => {
+    const ids = notifs.filter(n => !n.leida).map(n => n.id);
+    if (ids.length === 0) return;
+    await supabase.from("notificaciones").update({ leida: true }).in("id", ids);
+    toast({ title: "Todas marcadas como leídas" });
+    load();
+  };
+
+  const eliminar = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    await supabase.from("notificaciones").delete().eq("id", id);
+    load();
+  };
+
+  return (
+    <>
+      <div className="flex items-end justify-between mb-8 gap-3 flex-wrap">
+        <div>
+          <h1 className="font-display text-3xl font-bold text-foreground">Notificaciones</h1>
+          <p className="font-body text-sm text-muted-foreground mt-2">Alertas de casos, documentos y eventos del bufete en tiempo real</p>
+        </div>
+        {notifs.some(n => !n.leida) && (
+          <Button size="sm" variant="outline" onClick={marcarTodas}>Marcar todas como leídas</Button>
+        )}
+      </div>
+      {loading ? <p className="text-sm text-muted-foreground">Cargando…</p> : notifs.length === 0 ? (
+        <div className="bg-card rounded-xl border border-border p-8 text-center">
+          <Bell className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+          <p className="font-body text-sm text-muted-foreground">No tienes notificaciones.</p>
+        </div>
+      ) : (
+        <div className="grid gap-3">
+          {notifs.map((n) => (
+            <button key={n.id} onClick={() => onClick(n)} className={`text-left bg-card rounded-xl border p-4 flex items-center gap-4 hover:border-accent/30 transition-all ${n.leida ? "border-border opacity-70" : "border-accent/30"}`}>
+              <div className={`w-2 h-2 rounded-full flex-shrink-0 ${n.leida ? "bg-muted-foreground/30" : "bg-accent"}`} />
+              <div className="flex-1 min-w-0">
+                <p className="font-body text-sm font-semibold text-foreground">{n.titulo}</p>
+                <p className="font-body text-xs text-muted-foreground mt-0.5">{n.mensaje}</p>
+                <p className="font-body text-[10px] text-muted-foreground/70 mt-1">{new Date(n.created_at).toLocaleString("es-CO", { dateStyle: "medium", timeStyle: "short" })}</p>
+              </div>
+              <button onClick={(e) => eliminar(e, n.id)} className="p-1.5 rounded-md bg-muted text-muted-foreground hover:text-destructive" title="Eliminar">
+                <X className="w-4 h-4" />
+              </button>
+            </button>
+          ))}
+        </div>
+      )}
+    </>
+  );
+};
+
 
 /* ── Configuración ── */
 const SeccionConfiguracion = () => (
@@ -1150,62 +1379,5 @@ const SeccionComentarios = () => {
   );
 };
 
-/* ── Dashboard Qlik (embed) ── */
-const SeccionQlik = () => {
-  const [qlikUrl, setQlikUrl] = useState("");
-  const [embedded, setEmbedded] = useState("");
-
-  return (
-    <>
-      <SectionHeader title="Dashboard Qlik" description="Integración con Qlik Sense para análisis avanzado y administración del bufete" />
-      <div className="bg-card rounded-xl border border-border p-5 mb-6">
-        <h3 className="font-display text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
-          <TrendingUp className="w-4 h-4 text-accent" />
-          Configuración del embed
-        </h3>
-        <p className="font-body text-xs text-muted-foreground mb-4">
-          Pega la URL de tu app de Qlik Sense (Single Configurator o iframe URL). Asegúrate de que el dominio Jurova esté en la lista blanca de Qlik.
-        </p>
-        <div className="flex gap-3">
-          <Input
-            placeholder="https://tu-tenant.qlikcloud.com/single/?appid=..."
-            value={qlikUrl}
-            onChange={(e) => setQlikUrl(e.target.value)}
-            className="flex-1"
-          />
-          <Button
-            onClick={() => setEmbedded(qlikUrl)}
-            className="gradient-gold text-primary-foreground font-body font-semibold shadow-gold hover:opacity-90 border-0"
-          >
-            Cargar
-          </Button>
-        </div>
-      </div>
-
-      <div className="bg-card rounded-xl border border-border overflow-hidden">
-        <div className="px-5 py-3 border-b border-border flex items-center justify-between bg-muted/30">
-          <p className="font-body text-xs text-muted-foreground uppercase tracking-wider">Vista del dashboard</p>
-          {embedded && <span className="font-body text-[10px] text-accent">● Conectado</span>}
-        </div>
-        {embedded ? (
-          <iframe
-            src={embedded}
-            title="Qlik Dashboard"
-            className="w-full h-[600px] border-0"
-            sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-          />
-        ) : (
-          <div className="h-[400px] flex flex-col items-center justify-center text-center p-8">
-            <TrendingUp className="w-12 h-12 text-muted-foreground/40 mb-4" />
-            <p className="font-display text-lg font-semibold text-foreground">Sin dashboard cargado</p>
-            <p className="font-body text-sm text-muted-foreground mt-2 max-w-md">
-              Pega la URL de tu app de Qlik Sense arriba y haz clic en "Cargar" para visualizar el dashboard de administración integral del bufete.
-            </p>
-          </div>
-        )}
-      </div>
-    </>
-  );
-};
 
 export default DashboardJefe;
