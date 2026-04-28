@@ -48,7 +48,6 @@ const menuItems = [
   { id: "comentarios", icon: MessageSquare, label: "Comentarios Internos" },
   { id: "calendario", icon: CalendarDays, label: "Calendario General" },
   { id: "analitica", icon: BarChart3, label: "Analítica y KPIs" },
-  { id: "qlik", icon: TrendingUp, label: "Dashboard Qlik" },
   { id: "notificaciones", icon: Bell, label: "Notificaciones" },
   { id: "configuracion", icon: Settings, label: "Configuración" },
 ];
