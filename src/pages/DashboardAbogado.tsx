@@ -714,25 +714,49 @@ const SeccionAnalitica = ({ casos, actuaciones, audiencias }: { casos: Caso[]; a
   const today = new Date(); today.setHours(0,0,0,0);
   const proximasAudiencias = audiencias.filter(a => new Date(a.fecha_inicio) >= today).length;
   const terminosPendientes = actuaciones.filter(a => a.vence_at && !a.cumplida).length;
+  const cumplidas = actuaciones.filter(a => a.cumplida).length;
+
+  const porEtapa = Object.entries(casos.reduce<Record<string, number>>((acc, c) => { acc[c.etapa] = (acc[c.etapa] ?? 0) + 1; return acc; }, {})).map(([name, value]) => ({ name, value }));
+  const porTipo = Object.entries(casos.reduce<Record<string, number>>((acc, c) => { acc[c.tipo || "—"] = (acc[c.tipo || "—"] ?? 0) + 1; return acc; }, {})).map(([name, value]) => ({ name, value }));
+  const actuacionesData = [
+    { name: "Cumplidas", value: cumplidas },
+    { name: "Pendientes", value: terminosPendientes },
+  ].filter(d => d.value > 0);
 
   const kpis = [
-    { label: "Casos Activos", value: String(activos) },
-    { label: "Casos Cerrados", value: String(cerrados) },
-    { label: "Audiencias Próximas", value: String(proximasAudiencias) },
-    { label: "Términos Pendientes", value: String(terminosPendientes) },
+    { label: "Casos Activos", value: activos, color: "from-indigo-500 to-violet-500", icon: Briefcase },
+    { label: "Casos Cerrados", value: cerrados, color: "from-emerald-500 to-teal-500", icon: TrendingUp },
+    { label: "Audiencias Próximas", value: proximasAudiencias, color: "from-sky-500 to-cyan-500", icon: CalendarDays },
+    { label: "Términos Pendientes", value: terminosPendientes, color: "from-rose-500 to-orange-500", icon: AlertTriangle },
   ];
 
   return (
     <>
       <SectionHeader title="Analítica y KPIs" description="Indicadores en tiempo real de tu carga laboral" />
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        {kpis.map((kpi) => (
-          <div key={kpi.label} className="bg-card rounded-xl border border-border p-5">
-            <p className="font-body text-xs text-muted-foreground uppercase tracking-wider">{kpi.label}</p>
-            <p className="font-display text-2xl font-bold text-foreground mt-2">{kpi.value}</p>
-            <div className="flex items-center gap-1 mt-2"><TrendingUp className="w-3 h-3 text-accent" /></div>
+        {kpis.map((k) => (
+          <div key={k.label} className={`rounded-xl p-5 text-white shadow-luxury bg-gradient-to-br ${k.color}`}>
+            <div className="flex items-center justify-between">
+              <p className="font-body text-xs uppercase tracking-wider opacity-80">{k.label}</p>
+              <k.icon className="w-4 h-4 opacity-80" />
+            </div>
+            <p className="font-display text-3xl font-bold mt-2">{k.value}</p>
           </div>
         ))}
+      </div>
+      <div className="grid lg:grid-cols-3 gap-4">
+        <div className="bg-card rounded-xl border border-border p-5">
+          <p className="font-display text-base font-semibold text-foreground mb-4">Casos por Etapa</p>
+          <div className="h-64"><RPieChart data={porEtapa} /></div>
+        </div>
+        <div className="bg-card rounded-xl border border-border p-5">
+          <p className="font-display text-base font-semibold text-foreground mb-4">Casos por Tipo</p>
+          <div className="h-64"><RBarChart data={porTipo} /></div>
+        </div>
+        <div className="bg-card rounded-xl border border-border p-5">
+          <p className="font-display text-base font-semibold text-foreground mb-4">Actuaciones</p>
+          <div className="h-64"><RPieChart data={actuacionesData} /></div>
+        </div>
       </div>
     </>
   );
