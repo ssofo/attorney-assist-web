@@ -992,8 +992,6 @@ const SeccionCalendarioJefe = () => {
 };
 
 /* ── Analítica (dashboard real con gráficos) ── */
-const CHART_COLORS = ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#ec4899", "#84cc16"];
-
 const SeccionAnaliticaJefe = () => {
   const [casos, setCasos] = useState<{ id: string; etapa: string; tipo: string; abogado_id: string | null; created_at: string; urgente: boolean; area_id: string | null }[]>([]);
   const [profs, setProfs] = useState<Record<string, string>>({});
