@@ -19,6 +19,7 @@ import {
   KeyRound, ArrowLeft, Plus, Video, MapPin, CheckCircle2, Trash2, Download,
 } from "lucide-react";
 import { GestionDocumentos } from "@/components/GestionDocumentos";
+import { RPieChart, RBarChart } from "@/components/AnalyticsCharts";
 
 const ETAPAS = ["Creación", "Proyección", "Recaudo Probatorio", "Revisión", "Firma", "Radicado", "Cerrado"] as const;
 type Etapa = typeof ETAPAS[number];
