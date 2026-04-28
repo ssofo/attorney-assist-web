@@ -160,8 +160,7 @@ const DashboardJefe = () => {
           {activeSection === "comentarios" && <SeccionComentarios />}
           {activeSection === "calendario" && <SeccionCalendarioJefe />}
           {activeSection === "analitica" && <SeccionAnaliticaJefe />}
-          {activeSection === "qlik" && <SeccionQlik />}
-          {activeSection === "notificaciones" && <SeccionNotificacionesJefe />}
+          {activeSection === "notificaciones" && <SeccionNotificacionesJefe setActiveSection={setActiveSection} />}
           {activeSection === "configuracion" && <SeccionConfiguracion />}
         </div>
       </main>
