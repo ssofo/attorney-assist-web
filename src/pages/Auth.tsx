@@ -79,14 +79,15 @@ const Auth = () => {
       return;
     }
 
-    // Verifica que el rol del usuario coincide con el seleccionado
-    const { data: roleRow } = await supabase
+    // Verifica que el usuario tenga el rol seleccionado, aunque también tenga otros roles
+    const { data: roleRow, error: roleError } = await supabase
       .from("user_roles")
       .select("role")
       .eq("user_id", data.user.id)
+      .eq("role", selectedRole)
       .maybeSingle();
 
-    if (!roleRow || roleRow.role !== selectedRole) {
+    if (roleError || !roleRow) {
       await supabase.auth.signOut();
       setLoading(false);
       toast({
