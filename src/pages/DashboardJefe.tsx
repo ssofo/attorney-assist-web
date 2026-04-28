@@ -36,6 +36,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { GestionDocumentos } from "@/components/GestionDocumentos";
+import { RPieChart, RBarChart, RLineChart } from "@/components/AnalyticsCharts";
 import { Upload } from "lucide-react";
 
 const menuItems = [
